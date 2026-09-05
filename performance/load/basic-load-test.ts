@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { TestServer, runBenchmark, printResults } from "../src/utils.js";
+import { printResults, runBenchmark, TestServer } from "../src/utils.js";
 
 async function basicLoadTest() {
 	const server = new TestServer({ baseLatencyMs: 10, jitterMs: 5 });

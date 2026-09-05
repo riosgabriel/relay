@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { TestServer, printResults, type BenchmarkResult } from "../src/utils.js";
+import { TestServer } from "../src/utils.js";
 
 /**
  * Scenario: Bulkhead isolation test
@@ -74,7 +74,7 @@ async function bulkheadScenario() {
 
 		await Promise.allSettled(promises);
 		const endTime = performance.now();
-		const durationMs = endTime - startTime;
+		const _durationMs = endTime - startTime;
 
 		// Calculate statistics for each partition
 		const calculateStats = (latencies: number[]) => {
@@ -109,7 +109,7 @@ async function bulkheadScenario() {
 		console.log(`  P99 latency: ${slowStats.p99.toFixed(0)}ms`);
 
 		console.log("\n=== ANALYSIS ===");
-		
+
 		// Check if fast partition was affected by slow partition
 		const expectedFastLatency = 10; // 5ms base + some overhead
 		if (fastStats.avg > expectedFastLatency * 2) {
@@ -122,7 +122,9 @@ async function bulkheadScenario() {
 
 		// Verify queue behavior
 		const totalFailed = results.fast.failed + results.slow.failed;
-		console.log(`\nTotal failures: ${totalFailed}/${totalRequests} (${((totalFailed / totalRequests) * 100).toFixed(1)}%)`);
+		console.log(
+			`\nTotal failures: ${totalFailed}/${totalRequests} (${((totalFailed / totalRequests) * 100).toFixed(1)}%)`,
+		);
 	} finally {
 		await Promise.all([fastServer.stop(), slowServer.stop()]);
 	}

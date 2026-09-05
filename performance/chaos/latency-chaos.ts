@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { TestServer, printResults, type BenchmarkResult } from "../src/utils.js";
+import { type BenchmarkResult, printResults, TestServer } from "../src/utils.js";
 
 /**
  * Chaos Engineering: Latency spikes
@@ -27,10 +27,10 @@ async function latencyChaos() {
 		let failed = 0;
 
 		// Simulate latency spikes during the test
-		let spikeActive = false;
-		const originalHandler = server["server"]?.listeners("request")[0];
+		const _spikeActive = false;
+		const _originalHandler = server.server?.listeners("request")[0];
 
-		server["server"]?.on("request", async (req, res) => {
+		server.server?.on("request", async (_req, _res) => {
 			// Randomly inject latency spikes
 			if (Math.random() < 0.2) {
 				// 20% chance of spike
@@ -44,18 +44,21 @@ async function latencyChaos() {
 
 		for (let i = 0; i < totalRequests; i++) {
 			const start = performance.now();
-			const promise = client.get(`/chaos/${i}`).toPromise().then((result) => {
-				const latency = performance.now() - start;
-				latencies.push(latency);
+			const promise = client
+				.get(`/chaos/${i}`)
+				.toPromise()
+				.then((result) => {
+					const latency = performance.now() - start;
+					latencies.push(latency);
 
-				if (result.success) {
-					successful++;
-				} else {
-					failed++;
-					const errorKey = result.error.constructor.name;
-					errors[errorKey] = (errors[errorKey] ?? 0) + 1;
-				}
-			});
+					if (result.success) {
+						successful++;
+					} else {
+						failed++;
+						const errorKey = result.error.constructor.name;
+						errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+					}
+				});
 
 			promises.push(promise);
 
@@ -70,8 +73,7 @@ async function latencyChaos() {
 		const durationMs = endTime - startTime;
 
 		latencies.sort((a, b) => a - b);
-		const avgLatencyMs =
-			latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+		const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 		const calculatePercentile = (p: number): number => {
 			if (latencies.length === 0) return 0;
@@ -109,9 +111,7 @@ async function latencyChaos() {
 		console.log(`Timeout rate: ${((failed / totalRequests) * 100).toFixed(1)}%`);
 
 		if (spikedLatencies.length > 0) {
-			const avgSpikeLatency =
-				spikedLatencies.reduce((sum, val) => sum + val, 0) /
-				spikedLatencies.length;
+			const avgSpikeLatency = spikedLatencies.reduce((sum, val) => sum + val, 0) / spikedLatencies.length;
 			console.log(`Average spiked latency: ${avgSpikeLatency.toFixed(0)}ms`);
 		}
 	} finally {

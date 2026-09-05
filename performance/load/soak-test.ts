@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { TestServer, printResults, type BenchmarkResult } from "../src/utils.js";
+import { type BenchmarkResult, printResults, TestServer } from "../src/utils.js";
 
 /**
  * Soak test: Run sustained load over time to detect memory leaks and degradation
@@ -72,8 +72,7 @@ async function soakTest() {
 
 		// Calculate results
 		latencies.sort((a, b) => a - b);
-		const avgLatencyMs =
-			latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+		const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 		const calculatePercentile = (p: number): number => {
 			if (latencies.length === 0) return 0;
@@ -104,10 +103,8 @@ async function soakTest() {
 		const firstHalf = latencies.slice(0, Math.floor(latencies.length / 2));
 		const secondHalf = latencies.slice(Math.floor(latencies.length / 2));
 
-		const firstHalfAvg =
-			firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length || 0;
-		const secondHalfAvg =
-			secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length || 0;
+		const firstHalfAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length || 0;
+		const secondHalfAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length || 0;
 
 		const degradation = ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100;
 

@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { TestServer, printResults, type BenchmarkResult } from "../src/utils.js";
+import { type BenchmarkResult, printResults, TestServer } from "../src/utils.js";
 
 /**
  * Scenario: Thundering herd test
@@ -49,18 +49,21 @@ async function thunderingHerdScenario() {
 
 		for (let i = 0; i < totalRequests; i++) {
 			const start = performance.now();
-			const promise = client.get(`/herd/${i}`).toPromise().then((result) => {
-				const latency = performance.now() - start;
-				latencies.push(latency);
+			const promise = client
+				.get(`/herd/${i}`)
+				.toPromise()
+				.then((result) => {
+					const latency = performance.now() - start;
+					latencies.push(latency);
 
-				if (result.success) {
-					successful++;
-				} else {
-					failed++;
-					const errorKey = result.error.constructor.name;
-					errors[errorKey] = (errors[errorKey] ?? 0) + 1;
-				}
-			});
+					if (result.success) {
+						successful++;
+					} else {
+						failed++;
+						const errorKey = result.error.constructor.name;
+						errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+					}
+				});
 
 			promises.push(promise);
 		}
@@ -70,8 +73,7 @@ async function thunderingHerdScenario() {
 		const durationMs = endTime - startTime;
 
 		latencies.sort((a, b) => a - b);
-		const avgLatencyMs =
-			latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+		const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 		const calculatePercentile = (p: number): number => {
 			if (latencies.length === 0) return 0;
@@ -105,10 +107,8 @@ async function thunderingHerdScenario() {
 		const firstBatch = latencies.slice(0, 20); // First 20 (concurrency limit)
 		const restBatch = latencies.slice(20);
 
-		const firstBatchAvg =
-			firstBatch.reduce((sum, val) => sum + val, 0) / firstBatch.length || 0;
-		const restBatchAvg =
-			restBatch.reduce((sum, val) => sum + val, 0) / restBatch.length || 0;
+		const firstBatchAvg = firstBatch.reduce((sum, val) => sum + val, 0) / firstBatch.length || 0;
+		const restBatchAvg = restBatch.reduce((sum, val) => sum + val, 0) / restBatch.length || 0;
 
 		console.log(`First batch (immediate, n=20) avg: ${firstBatchAvg.toFixed(0)}ms`);
 		console.log(`Queued batch (n=${restBatch.length}) avg: ${restBatchAvg.toFixed(0)}ms`);

@@ -1,13 +1,11 @@
 import { HttpClient } from "vereda";
-import { TestServer, runBenchmark, printResults, type BenchmarkResult } from "../src/utils.js";
+import { type BenchmarkResult, printResults, runBenchmark, TestServer } from "../src/utils.js";
 
 /**
  * Comprehensive benchmark runner
  * Executes all benchmarks and generates a summary report
  */
-interface BenchmarkFn {
-	(): Promise<BenchmarkResult>;
-}
+type BenchmarkFn = () => Promise<BenchmarkResult>;
 
 const benchmarks: Record<string, BenchmarkFn> = {
 	// Load Tests
@@ -122,10 +120,13 @@ const benchmarks: Record<string, BenchmarkFn> = {
 				const target = isFast ? "fast" : "slow";
 
 				promises.push(
-					client.get(`${baseUrl}/test/${i}`).toPromise().then((result) => {
-						if (result.success) results[target].success++;
-						else results[target].failed++;
-					}),
+					client
+						.get(`${baseUrl}/test/${i}`)
+						.toPromise()
+						.then((result) => {
+							if (result.success) results[target].success++;
+							else results[target].failed++;
+						}),
 				);
 			}
 
@@ -157,9 +158,9 @@ const benchmarks: Record<string, BenchmarkFn> = {
 };
 
 async function runAllBenchmarks(selectedBenchmarks?: string[]) {
-	console.log("\n" + "=".repeat(60));
+	console.log(`\n${"=".repeat(60)}`);
 	console.log("VEREDA BENCHMARK SUITE");
-	console.log("=".repeat(60) + "\n");
+	console.log(`${"=".repeat(60)}\n`);
 
 	const toRun = selectedBenchmarks
 		? Object.entries(benchmarks).filter(([name]) =>
@@ -186,7 +187,7 @@ async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 }
 
 function generateSummary(results: BenchmarkResult[]): void {
-	console.log("\n" + "=".repeat(60));
+	console.log(`\n${"=".repeat(60)}`);
 	console.log("SUMMARY REPORT");
 	console.log("=".repeat(60));
 	console.log(`Total Benchmarks: ${results.length}`);
@@ -201,7 +202,7 @@ function generateSummary(results: BenchmarkResult[]): void {
 			"Avg (ms)": r.avgLatencyMs.toFixed(1),
 			"P95 (ms)": r.p95LatencyMs.toFixed(1),
 			"P99 (ms)": r.p99LatencyMs.toFixed(1),
-			"Success %": ((r.successfulRequests / r.totalRequests) * 100).toFixed(1) + "%",
+			"Success %": `${((r.successfulRequests / r.totalRequests) * 100).toFixed(1)}%`,
 		})),
 	);
 
@@ -214,12 +215,16 @@ function generateSummary(results: BenchmarkResult[]): void {
 		);
 
 		console.log("\nKey Insights:");
-		console.log(`  Highest Throughput: ${byThroughput[0].name} (${byThroughput[0].requestsPerSecond.toFixed(1)} req/s)`);
+		console.log(
+			`  Highest Throughput: ${byThroughput[0].name} (${byThroughput[0].requestsPerSecond.toFixed(1)} req/s)`,
+		);
 		console.log(`  Lowest P95 Latency: ${byLatency[0].name} (${byLatency[0].p95LatencyMs.toFixed(1)}ms)`);
-		console.log(`  Most Reliable: ${byReliability[0].name} (${((byReliability[0].successfulRequests / byReliability[0].totalRequests) * 100).toFixed(1)}% success)`);
+		console.log(
+			`  Most Reliable: ${byReliability[0].name} (${((byReliability[0].successfulRequests / byReliability[0].totalRequests) * 100).toFixed(1)}% success)`,
+		);
 	}
 
-	console.log("\n" + "=".repeat(60) + "\n");
+	console.log(`\n${"=".repeat(60)}\n`);
 }
 
 // CLI argument parsing

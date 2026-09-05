@@ -1,5 +1,5 @@
-import { HttpClient, NetworkError } from "vereda";
-import { TestServer, printResults, type BenchmarkResult } from "../src/utils.js";
+import { HttpClient } from "vereda";
+import { type BenchmarkResult, printResults, TestServer } from "../src/utils.js";
 
 /**
  * Chaos Engineering: Network failures
@@ -43,18 +43,21 @@ async function networkChaos() {
 
 		for (let i = 0; i < totalRequests; i++) {
 			const start = performance.now();
-			const promise = client.get(`/chaos/${i}`).toPromise().then((result) => {
-				const latency = performance.now() - start;
-				latencies.push(latency);
+			const promise = client
+				.get(`/chaos/${i}`)
+				.toPromise()
+				.then((result) => {
+					const latency = performance.now() - start;
+					latencies.push(latency);
 
-				if (result.success) {
-					successful++;
-				} else {
-					failed++;
-					const errorKey = result.error.constructor.name;
-					errors[errorKey] = (errors[errorKey] ?? 0) + 1;
-				}
-			});
+					if (result.success) {
+						successful++;
+					} else {
+						failed++;
+						const errorKey = result.error.constructor.name;
+						errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+					}
+				});
 
 			promises.push(promise);
 
@@ -69,8 +72,7 @@ async function networkChaos() {
 		const durationMs = endTime - startTime;
 
 		latencies.sort((a, b) => a - b);
-		const avgLatencyMs =
-			latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+		const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 		const calculatePercentile = (p: number): number => {
 			if (latencies.length === 0) return 0;
@@ -99,7 +101,9 @@ async function networkChaos() {
 
 		// Analysis
 		console.log("=== ANALYSIS ===");
-		console.log(`Retry effectiveness: ${((successful / totalRequests) * 100).toFixed(1)}% success despite 30% failure rate`);
+		console.log(
+			`Retry effectiveness: ${((successful / totalRequests) * 100).toFixed(1)}% success despite 30% failure rate`,
+		);
 
 		if (failed > 0) {
 			console.log("\nFailure breakdown:");

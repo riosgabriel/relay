@@ -1,4 +1,4 @@
-import { HttpClient, type Ticket } from "vereda";
+import type { HttpClient } from "vereda";
 
 export interface BenchmarkResult {
 	name: string;
@@ -42,13 +42,11 @@ export class TestServer {
 	) {}
 
 	async start(): Promise<number> {
-		const http = await import("http");
+		const http = await import("node:http");
 
 		return new Promise((resolve) => {
-			this.server = http.createServer(async (req, res) => {
-				const latency =
-					(this.options.baseLatencyMs ?? 10) +
-					Math.random() * (this.options.jitterMs ?? 5);
+			this.server = http.createServer(async (_req, res) => {
+				const latency = (this.options.baseLatencyMs ?? 10) + Math.random() * (this.options.jitterMs ?? 5);
 
 				await new Promise((r) => setTimeout(r, latency));
 
@@ -61,9 +59,7 @@ export class TestServer {
 				// Simulate failures
 				if (Math.random() < (this.options.failRate ?? 0)) {
 					res.statusCode =
-						this.options.statusCodes?.[
-							Math.floor(Math.random() * this.options.statusCodes.length)
-						] ?? 500;
+						this.options.statusCodes?.[Math.floor(Math.random() * this.options.statusCodes.length)] ?? 500;
 					res.end("Simulated failure");
 					return;
 				}
@@ -99,10 +95,7 @@ export function calculatePercentile(sorted: number[], percentile: number): numbe
 	return sorted[Math.max(0, index)];
 }
 
-export async function runBenchmark(
-	client: HttpClient,
-	options: BenchmarkOptions,
-): Promise<BenchmarkResult> {
+export async function runBenchmark(client: HttpClient, options: BenchmarkOptions): Promise<BenchmarkResult> {
 	const latencies: number[] = [];
 	const errors: Record<string, number> = {};
 	let successful = 0;
@@ -117,7 +110,10 @@ export async function runBenchmark(
 		const warmupPromises: Promise<void>[] = [];
 		for (let i = 0; i < options.warmupRequests; i++) {
 			warmupPromises.push(
-				client.get("/warmup").toPromise().then(() => {}),
+				client
+					.get("/warmup")
+					.toPromise()
+					.then(() => {}),
 			);
 			if (warmupPromises.length >= concurrency) {
 				await Promise.allSettled(warmupPromises);
@@ -127,27 +123,28 @@ export async function runBenchmark(
 		await Promise.allSettled(warmupPromises);
 	}
 
-	console.log(
-		`Starting benchmark: ${options.name} (${totalRequests} requests, concurrency: ${concurrency})`,
-	);
+	console.log(`Starting benchmark: ${options.name} (${totalRequests} requests, concurrency: ${concurrency})`);
 
 	const startTime = performance.now();
 	const promises: Promise<void>[] = [];
 
 	for (let i = 0; i < totalRequests; i++) {
 		const start = performance.now();
-		const promise = client.get(`/benchmark/${i}`).toPromise().then((result) => {
-			const latency = performance.now() - start;
-			latencies.push(latency);
+		const promise = client
+			.get(`/benchmark/${i}`)
+			.toPromise()
+			.then((result) => {
+				const latency = performance.now() - start;
+				latencies.push(latency);
 
-			if (result.success) {
-				successful++;
-			} else {
-				failed++;
-				const errorKey = result.error.constructor.name;
-				errors[errorKey] = (errors[errorKey] ?? 0) + 1;
-			}
-		});
+				if (result.success) {
+					successful++;
+				} else {
+					failed++;
+					const errorKey = result.error.constructor.name;
+					errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+				}
+			});
 
 		promises.push(promise);
 
@@ -164,8 +161,7 @@ export async function runBenchmark(
 
 	// Calculate statistics
 	latencies.sort((a, b) => a - b);
-	const avgLatencyMs =
-		latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+	const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 	return {
 		name: options.name,
@@ -186,7 +182,7 @@ export async function runBenchmark(
 }
 
 export function printResults(result: BenchmarkResult): void {
-	console.log("\n" + "=".repeat(60));
+	console.log(`\n${"=".repeat(60)}`);
 	console.log(`BENCHMARK: ${result.name}`);
 	console.log("=".repeat(60));
 	console.log(`Timestamp: ${result.timestamp}`);
@@ -215,5 +211,5 @@ export function printResults(result: BenchmarkResult): void {
 		}
 	}
 
-	console.log("=".repeat(60) + "\n");
+	console.log(`${"=".repeat(60)}\n`);
 }

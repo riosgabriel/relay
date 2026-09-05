@@ -72,6 +72,16 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": ["performance/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
 		}
 	]
 }
