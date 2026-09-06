@@ -43,7 +43,7 @@ async function soakTest() {
 		// Start sending requests at constant rate
 		const sendRequest = async () => {
 			const start = performance.now();
-			const result = await client.get(`/soak/${totalRequests}`).toPromise();
+			const result = await client.get(`/soak/${totalRequests}`, {}).toPromise();
 			const latency = performance.now() - start;
 			latencies.push(latency);
 			totalRequests++;
@@ -67,7 +67,7 @@ async function soakTest() {
 		await new Promise((resolve) => setTimeout(resolve, durationMs));
 
 		// Cleanup
-		intervals.forEach((i) => clearInterval(i));
+		intervals.forEach((i) => void clearInterval(i));
 		clearInterval(progressInterval);
 
 		// Calculate results

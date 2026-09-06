@@ -41,7 +41,7 @@ async function retryStormScenario() {
 		let totalAttempts = 0;
 
 		// Track retry events
-		client.on("retry", ({ ticketId, attempt, delayMs }) => {
+		client.on("retry", () => {
 			totalAttempts++;
 		});
 

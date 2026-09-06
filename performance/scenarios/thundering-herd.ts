@@ -39,7 +39,7 @@ async function thunderingHerdScenario() {
 		let failed = 0;
 		const queueTimes: number[] = [];
 
-		client.on("request", ({ ticketId }) => {
+		client.on("request", () => {
 			queueTimes.push(performance.now());
 		});
 

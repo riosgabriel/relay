@@ -44,7 +44,7 @@ async function networkChaos() {
 		for (let i = 0; i < totalRequests; i++) {
 			const start = performance.now();
 			const promise = client
-				.get(`/chaos/${i}`)
+				.get(`/chaos/${i}`, {})
 				.toPromise()
 				.then((result) => {
 					const latency = performance.now() - start;
