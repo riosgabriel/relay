@@ -1,5 +1,5 @@
 import { HttpClient } from "vereda";
-import { type BenchmarkResult, printResults, runBenchmark, TestServer } from "../src/utils.js";
+import { type BenchmarkResult, printResults, runBenchmark, TestServer } from "./utils.js";
 
 /**
  * Comprehensive benchmark runner
@@ -155,6 +155,184 @@ const benchmarks: Record<string, BenchmarkFn> = {
 			await Promise.all([fastServer.stop(), slowServer.stop()]);
 		}
 	},
+
+	"Retry Storm": async () => {
+		const server = new TestServer({
+			baseLatencyMs: 10,
+			jitterMs: 5,
+			failRate: 0.8, // High failure rate to trigger many retries
+			statusCodes: [503],
+		});
+		await server.start();
+
+		try {
+			const client = HttpClient.create({
+				baseUrl: server.baseUrl,
+				retry: {
+					maxRetries: 3,
+					backoff: {
+						baseDelayMs: 100,
+						maxDelayMs: 5000,
+						jitter: true,
+					},
+				},
+				timeout: { attemptMs: 3000 },
+				concurrency: 50,
+			});
+
+			const totalRequests = 100;
+			const latencies: number[] = [];
+			const errors: Record<string, number> = {};
+			let successful = 0;
+			let failed = 0;
+
+			client.on("retry", () => {
+				// Track retries for analysis (not included in result)
+			});
+
+			const startTime = performance.now();
+			const promises: Promise<void>[] = [];
+
+			for (let i = 0; i < totalRequests; i++) {
+				const start = performance.now();
+				const promise = client
+					.get(`/storm/${i}`)
+					.toPromise()
+					.then((result) => {
+						const latency = performance.now() - start;
+						latencies.push(latency);
+
+						if (result.success) {
+							successful++;
+						} else {
+							failed++;
+							const errorKey = result.error.constructor.name;
+							errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+						}
+					});
+
+				promises.push(promise);
+			}
+
+			await Promise.allSettled(promises);
+			const endTime = performance.now();
+			const durationMs = endTime - startTime;
+
+			latencies.sort((a, b) => a - b);
+			const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+
+			const calculatePercentile = (p: number): number => {
+				if (latencies.length === 0) return 0;
+				const index = Math.ceil((p / 100) * latencies.length) - 1;
+				return latencies[Math.max(0, index)];
+			};
+
+			return {
+				name: "Retry Storm",
+				totalRequests,
+				successfulRequests: successful,
+				failedRequests: failed,
+				avgLatencyMs,
+				p50LatencyMs: calculatePercentile(50),
+				p95LatencyMs: calculatePercentile(95),
+				p99LatencyMs: calculatePercentile(99),
+				minLatencyMs: latencies[0] ?? 0,
+				maxLatencyMs: latencies[latencies.length - 1] ?? 0,
+				requestsPerSecond: totalRequests / (durationMs / 1000),
+				durationMs,
+				errors,
+				timestamp: new Date().toISOString(),
+			};
+		} finally {
+			await server.stop();
+		}
+	},
+
+	"Thundering Herd": async () => {
+		const server = new TestServer({ baseLatencyMs: 10, jitterMs: 5 });
+		await server.start();
+
+		try {
+			const client = HttpClient.create({
+				baseUrl: server.baseUrl,
+				retry: { maxRetries: 2 },
+				timeout: { attemptMs: 5000 },
+				concurrency: 20,
+				partitions: {
+					[server.baseUrl.replace("http://", "")]: {
+						concurrency: 10,
+						maxQueueSize: 100,
+					},
+				},
+			});
+
+			// Simulate idle period
+			await new Promise((resolve) => setTimeout(resolve, 2000));
+
+			// Suddenly fire all requests at once
+			const totalRequests = 200;
+			const latencies: number[] = [];
+			const errors: Record<string, number> = {};
+			let successful = 0;
+			let failed = 0;
+
+			const startTime = performance.now();
+			const promises: Promise<void>[] = [];
+
+			for (let i = 0; i < totalRequests; i++) {
+				const start = performance.now();
+				const promise = client
+					.get(`/herd/${i}`)
+					.toPromise()
+					.then((result) => {
+						const latency = performance.now() - start;
+						latencies.push(latency);
+
+						if (result.success) {
+							successful++;
+						} else {
+							failed++;
+							const errorKey = result.error.constructor.name;
+							errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+						}
+					});
+
+				promises.push(promise);
+			}
+
+			await Promise.allSettled(promises);
+			const endTime = performance.now();
+			const durationMs = endTime - startTime;
+
+			latencies.sort((a, b) => a - b);
+			const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
+
+			const calculatePercentile = (p: number): number => {
+				if (latencies.length === 0) return 0;
+				const index = Math.ceil((p / 100) * latencies.length) - 1;
+				return latencies[Math.max(0, index)];
+			};
+
+			return {
+				name: "Thundering Herd",
+				totalRequests,
+				successfulRequests: successful,
+				failedRequests: failed,
+				avgLatencyMs,
+				p50LatencyMs: calculatePercentile(50),
+				p95LatencyMs: calculatePercentile(95),
+				p99LatencyMs: calculatePercentile(99),
+				minLatencyMs: latencies[0] ?? 0,
+				maxLatencyMs: latencies[latencies.length - 1] ?? 0,
+				requestsPerSecond: totalRequests / (durationMs / 1000),
+				durationMs,
+				errors,
+				timestamp: new Date().toISOString(),
+			};
+		} finally {
+			await server.stop();
+		}
+	},
 };
 
 async function runAllBenchmarks(selectedBenchmarks?: string[]) {
@@ -162,11 +340,12 @@ async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 	console.log("VEREDA BENCHMARK SUITE");
 	console.log(`${"=".repeat(60)}\n`);
 
-	const toRun = selectedBenchmarks
-		? Object.entries(benchmarks).filter(([name]) =>
-				selectedBenchmarks.some((s) => name.toLowerCase().includes(s.toLowerCase())),
-			)
-		: Object.entries(benchmarks);
+	const toRun =
+		selectedBenchmarks && selectedBenchmarks.length > 0
+			? Object.entries(benchmarks).filter(([name]) =>
+					selectedBenchmarks.some((s) => name.toLowerCase().includes(s.toLowerCase())),
+				)
+			: Object.entries(benchmarks);
 
 	const results: BenchmarkResult[] = [];
 
