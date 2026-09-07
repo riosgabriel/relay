@@ -97,7 +97,7 @@ async function main() {
 
 	const result = await client.get("/get").toPromise();
 	if (result.success) {
-		console.log("Status:", result.data.status);
+		console.log("Status:", result.raw.status);
 	} else {
 		console.error("Error:", result.error.kind);
 	}
