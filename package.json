@@ -24,7 +24,7 @@
 		"prepare": "tsc && husky",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p examples/tsconfig.json",
 		"lint": "biome lint",
 		"lint:fix": "biome lint --write",
 		"format": "biome format --write",

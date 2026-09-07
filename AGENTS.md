@@ -10,7 +10,7 @@ bun run --bun test                              # same suite under Bun (CI's tes
 npm run test:watch                              # vitest watch mode
 npx vitest run test/queue/bulkhead.test.ts      # single test file
 npx vitest run -t "name fragment"               # single test by name
-npm run typecheck                               # tsc --noEmit (src + tests)
+npm run typecheck                               # tsc --noEmit (src + tests + examples)
 npm run build                                   # tsc -> dist/
 bun run check                                   # Biome lint + format + import order (the CI gate)
 bun run check:fix                               # same, applying safe fixes
@@ -31,7 +31,8 @@ logger in `src/middleware/index.ts`. Both sites carry `biome-ignore` comments ex
 ## Gotchas
 
 - **NodeNext ESM**: every relative import in `src/` and `test/` must use the `.js` extension even when importing `.ts` files (`from "./client.js"`).
-- **Test files are typechecked separately**: `tsconfig.json` excludes `**/*.test.ts` (it drives the `dist/` build, which must not contain tests). `tsconfig.test.json` covers `src/` + `test/` with `noEmit`, and `npm run typecheck` runs both, so test code is type-safe in CI.
+- **Everything outside `src/` is typechecked separately**: `tsconfig.json` drives the `dist/` build, so it covers `src/` only — tests must not ship in `dist/`, and neither must examples. `npm run typecheck` therefore runs three legs: `tsconfig.json` (src), `tsconfig.test.json` (src + test + `vitest.config.ts`), and `examples/tsconfig.json`. Adding a top-level directory of `.ts` files without adding a leg means nothing typechecks it.
+- **Editors need a `tsconfig.json` they can find**: they look only for the nearest file with that exact name, never `tsconfig.test.json`. A file outside every project lands in an inferred one with no `types: ["node"]`, which shows up as `node:` imports failing to resolve. `test/tsconfig.json` exists solely to point editors at the right project; `examples/tsconfig.json` doubles as the CI leg.
 - **Zod boundary**: zod is an optional peer dependency. Only `src/adapters/zod.ts` may import it; `src/core/` must stay zod-free.
 - **`dist/` is a gitignored** build artifact — never edit `dist/`.
 - **`bun.lock` is the only lockfile.** Install with `bun install`; CI uses `bun install --frozen-lockfile`. Do not run `npm install` — it ignores `bun.lock` and writes a `package-lock.json` (now gitignored). Note `bun install` also runs the root `prepare` script (`tsc && husky`), so installing builds `dist/`.
