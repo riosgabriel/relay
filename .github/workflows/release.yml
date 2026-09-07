@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build and test, but skip npm publish and the GitHub Release (echoes what would happen instead)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    # contents: write to create the GitHub Release; id-token: write for npm
+    # provenance (OIDC-based attestation, separate from the registry auth
+    # token below).
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history so the changelog-extraction step and `git describe`
+          # style tooling have tags/history available if ever needed.
+          fetch-depth: 0
+
+      - name: Determine dry-run mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Packaging hygiene (VRD-53) — never publish something publint or
+      # arethetypeswrong would flag.
+      - name: Verify package is publishable
+        run: |
+          npx publint
+          npx attw --pack .
+
+      - name: Resolve release version
+        id: version
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            TAG_VERSION="${TAG#v}"
+            if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+              echo "::error::Tag $TAG does not match package.json version $PACKAGE_VERSION"
+              exit 1
+            fi
+          else
+            TAG="v$PACKAGE_VERSION"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Pull the body between "## [<version>] - ..." and the next "## ["
+          # heading out of CHANGELOG.md (Keep a Changelog format). Kept as a
+          # small inline script rather than an extra Action/dependency.
+          awk -v ver="$VERSION" '
+            BEGIN { found = 0 }
+            $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            # Stop before the Keep a Changelog link-reference block at the
+            # bottom of the file (e.g. "[1.0.0]: https://...") so it never
+            # leaks into the most recent version'"'"'s extracted release body.
+            found && /^\[[^]]+\]:[[:space:]]/ { exit }
+            found { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::error::No CHANGELOG.md section found for version $VERSION"
+            exit 1
+          fi
+
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            cat /tmp/release-notes.md
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm
+        if: steps.mode.outputs.dry_run == 'false'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Would publish to npm (dry run)
+        if: steps.mode.outputs.dry_run == 'true'
+        run: |
+          echo "DRY RUN: would run 'npm publish --provenance --access public'"
+          echo "DRY RUN: package ${{ steps.version.outputs.tag }} (version ${{ steps.version.outputs.version }})"
+          npm pack --dry-run
+
+      - name: Create GitHub Release
+        if: steps.mode.outputs.dry_run == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: ${{ steps.changelog.outputs.notes }}
+
+      - name: Would create GitHub Release (dry run)
+        if: steps.mode.outputs.dry_run == 'true'
+        # The changelog body is passed through an env var rather than spliced
+        # directly into the script: it contains backticks and double quotes
+        # (Markdown code spans), which would otherwise be re-parsed by the
+        # shell once GitHub Actions substitutes ${{ }} into the script text.
+        env:
+          RELEASE_NOTES: ${{ steps.changelog.outputs.notes }}
+        run: |
+          echo "DRY RUN: would create GitHub Release ${{ steps.version.outputs.tag }} with body:"
+          echo "---"
+          printf '%s\n' "$RELEASE_NOTES"
+          echo "---"

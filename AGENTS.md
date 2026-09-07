@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Vereda: resilient HTTP client for Node.js (queuing, retries, bulkhead isolation) built on global `fetch`. ESM-only, Node 20+, zero runtime dependencies. Not published to npm; installed from GitHub, where the `prepare` script builds `dist/`.
+Vereda: resilient HTTP client for Node.js (queuing, retries, bulkhead isolation) built on global `fetch`. ESM-only, Node 20+, zero runtime dependencies. Published to npm with a prebuilt `dist/` (no install-time compile step); run `npx husky` once after cloning to wire up the local pre-commit hook.
 
 ## Commands
 
@@ -35,7 +35,7 @@ logger in `src/middleware/index.ts`. Both sites carry `biome-ignore` comments ex
 - **Editors need a `tsconfig.json` they can find**: they look only for the nearest file with that exact name, never `tsconfig.test.json`. A file outside every project lands in an inferred one with no `types: ["node"]`, which shows up as `node:` imports failing to resolve. `test/tsconfig.json` exists solely to point editors at the right project; `examples/tsconfig.json` doubles as the CI leg.
 - **Zod boundary**: zod is an optional peer dependency. Only `src/adapters/zod.ts` may import it; `src/core/` must stay zod-free.
 - **`dist/` is a gitignored** build artifact — never edit `dist/`.
-- **`bun.lock` is the only lockfile.** Install with `bun install`; CI uses `bun install --frozen-lockfile`. Do not run `npm install` — it ignores `bun.lock` and writes a `package-lock.json` (now gitignored). Note `bun install` also runs the root `prepare` script (`tsc && husky`), so installing builds `dist/`.
+- **`bun.lock` is the only lockfile.** Install with `bun install`; CI uses `bun install --frozen-lockfile`. Do not run `npm install` — it ignores `bun.lock` and writes a `package-lock.json` (now gitignored). There is no `prepare` script — installing does not build `dist/` or set up git hooks; run `npm run build` and `npx husky` yourself (see CONTRIBUTING.md).
 - **Two test runtimes.** CI runs the suite under Node 20/22/24 *and* under Bun. `bun run --bun test` reproduces the Bun leg — without `--bun`, bun respects the vitest shebang and silently runs under Node. Runtime-conditional expectations (currently only the TRACE row in `test/core/retry-matrix.test.ts`) key off a `Bun` global check; CI sets `EXPECTED_RUNTIME` on both legs so a leg that silently changes runtime fails instead of passing.
 - README prose can drift (e.g. it claims N tests; suite has a different count). Trust code, config, and test output over README claims.
 
