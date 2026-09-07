@@ -8,7 +8,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/dist", "!**/coverage", "!bun.lock", "!!**/performance/node_modules"]
+		"includes": ["**", "!**/dist", "!**/coverage", "!bun.lock", "!!**/node_modules"]
 	},
 	"formatter": {
 		"enabled": true,
