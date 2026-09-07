@@ -51,7 +51,7 @@ Tests are self-contained: integration tests spin up `node:http` servers on ephem
 - Follow the existing patterns in the codebase.
 - Preserve the behavioral invariants below — they're load-bearing.
 - Every relative import in `src/` and `test/` must use the `.js` extension (NodeNext ESM), even when importing a `.ts` file.
-- `npm run typecheck` skips `**/*.test.ts`; run the tests to keep test code type-safe.
+- `npm run typecheck` checks `src/` (via `tsconfig.json`, which excludes `**/*.test.ts` so tests stay out of `dist/`) and then `src/` + `test/` (via `tsconfig.test.json`).
 - Zod is an optional peer dependency. Only `src/adapters/zod.ts` may import it; `src/core/` must stay zod-free.
 - CI runs `bun run ci` (`biome ci --error-on-warnings`) over the whole tree — run `bun run check` before pushing.
 

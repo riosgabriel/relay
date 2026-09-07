@@ -31,7 +31,7 @@ logger in `src/middleware/index.ts`. Both sites carry `biome-ignore` comments ex
 ## Gotchas
 
 - **NodeNext ESM**: every relative import in `src/` and `test/` must use the `.js` extension even when importing `.ts` files (`from "./client.js"`).
-- **Test files are typechecked separately**: `tsconfig.json` excludes `**/*.test.ts` (it drives the `dist/` build, which must not contain tests). `tsconfig.test.json` covers `src/` + `test/` with `noEmit`, and `npm run typecheck` runs both, so test code is type-safe in CI.
+- **Test files are typechecked separately**: `tsconfig.json` excludes `**/*.test.ts` (it drives the `dist/` build, which must not contain tests). `tsconfig.test.json` covers `src/` + `test/` with `noEmit`, and `npm run typecheck` runs both, so test code is type-safe in CI. `test/tsconfig.json` is a one-line re-export of it so that editors — which only look for the nearest `tsconfig.json` — resolve test files against the right project instead of an inferred one with no `@types/node`.
 - **Zod boundary**: zod is an optional peer dependency. Only `src/adapters/zod.ts` may import it; `src/core/` must stay zod-free.
 - **`dist/` is a gitignored** build artifact — never edit `dist/`.
 - **`bun.lock` is the only lockfile.** Install with `bun install`; CI uses `bun install --frozen-lockfile`. Do not run `npm install` — it ignores `bun.lock` and writes a `package-lock.json` (now gitignored). Note `bun install` also runs the root `prepare` script (`tsc && husky`), so installing builds `dist/`.

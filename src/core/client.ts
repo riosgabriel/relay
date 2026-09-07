@@ -574,7 +574,7 @@ export class HttpClient {
 	// ---------------------------------------------------------------------------
 
 	/** GET request with JSON parsing. */
-	get<T>(url: string, options: Omit<RequestOptions<T>, "method">): Ticket<T> {
+	get<T>(url: string, options: Omit<RequestOptions<T>, "method"> = {}): Ticket<T> {
 		return this.request(url, { ...options, method: "GET" });
 	}
 
