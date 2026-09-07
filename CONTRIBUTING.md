@@ -10,12 +10,21 @@ Thanks for your interest! Vereda is a small, focused library, and we're glad to 
 git clone https://github.com/riosgabriel/vereda.git
 cd vereda
 bun install
+npx husky
 ```
 
 `bun.lock` is the only lockfile — install with Bun so you get the same
 dependency tree CI does. Requires Node 20+ (enforced via `engines` in
 package.json); the library itself is runtime-agnostic and CI tests it under
 both Node and Bun.
+
+`npx husky` is a one-time step that wires up the pre-commit hook in
+`.husky/`. It used to run automatically via the `prepare` script, but
+`prepare` also ran `tsc` on every install (needed when the package was
+installed straight from GitHub) — now that the package publishes a
+prebuilt `dist/` to npm, `prepare` would force every consumer to compile
+the library on install, so it's gone. Run `npx husky` once after cloning
+to get the local git hook; nothing else in this section depends on it.
 
 ## Commands
 

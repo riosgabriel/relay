@@ -3,25 +3,24 @@
 	"version": "1.0.0",
 	"description": "A resilient HTTP client with automatic queuing, retries, and bulkhead isolation",
 	"type": "module",
-	"main": "./dist/core/index.js",
-	"types": "./dist/core/index.d.ts",
+	"sideEffects": false,
 	"exports": {
 		".": {
-			"import": "./dist/core/index.js",
-			"types": "./dist/core/index.d.ts"
+			"types": "./dist/core/index.d.ts",
+			"import": "./dist/core/index.js"
 		},
 		"./middleware": {
-			"import": "./dist/middleware/index.js",
-			"types": "./dist/middleware/index.d.ts"
+			"types": "./dist/middleware/index.d.ts",
+			"import": "./dist/middleware/index.js"
 		},
 		"./zod": {
-			"import": "./dist/adapters/zod.js",
-			"types": "./dist/adapters/zod.d.ts"
+			"types": "./dist/adapters/zod.d.ts",
+			"import": "./dist/adapters/zod.js"
 		}
 	},
 	"scripts": {
 		"build": "tsc",
-		"prepare": "tsc && husky",
+		"prepublishOnly": "npm run build && npm test",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p examples/tsconfig.json",
@@ -42,11 +41,21 @@
 		"resilience"
 	],
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/riosgabriel/vereda.git"
+	},
+	"bugs": {
+		"url": "https://github.com/riosgabriel/vereda/issues"
+	},
+	"homepage": "https://github.com/riosgabriel/vereda#readme",
 	"engines": {
 		"node": ">=20"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"README.md",
+		"LICENSE"
 	],
 	"peerDependencies": {
 		"zod": "^4.5.4"
@@ -57,9 +66,11 @@
 		}
 	},
 	"devDependencies": {
+		"@arethetypeswrong/cli": "^0.18.5",
 		"@biomejs/biome": "^2.5.12",
 		"@types/node": "^26.4.1",
 		"husky": "^9.1.7",
+		"publint": "^0.3.24",
 		"tsx": "^4.23.13",
 		"typescript": "^7.0.2",
 		"vitest": "^5.0.0",
