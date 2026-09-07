@@ -1,0 +1,62 @@
+import { describe, expect, it, vi } from "vitest";
+import { NetworkError } from "../../src/core/errors.js";
+import { Bulkhead } from "../../src/queue/bulkhead.js";
+import { runRetryLoop } from "../../src/queue/retry.js";
+import { createTicket } from "../../src/ticket/ticket.js";
+
+describe("runRetryLoop", () => {
+	it("with maxRetries: 0, marks done with the raw first error (never wraps in MaxRetriesExceededError)", async () => {
+		const { ticket, controller } = createTicket<unknown>("t-zero-retries");
+		const bulkhead = new Bulkhead("test");
+		const firstError = new NetworkError("connection reset");
+		const onFailure = vi.fn();
+
+		await runRetryLoop({
+			url: "http://example.test/resource",
+			requestOptions: {},
+			timeoutConfig: {},
+			retryConfig: { maxRetries: 0 },
+			ticket,
+			controller,
+			middleware: [],
+			bulkhead,
+			firstError,
+			onFailure,
+		});
+
+		expect(onFailure).toHaveBeenCalledWith(firstError, 1);
+		expect(ticket.status.state).toBe("done");
+		if (ticket.status.state === "done" && !ticket.status.result.success) {
+			expect(ticket.status.result.error).toBe(firstError);
+		}
+	});
+
+	it("marks a ticket cancelled before the first retry iteration when already cancelled", async () => {
+		const { ticket, controller } = createTicket<unknown>("t-pre-cancelled");
+		const bulkhead = new Bulkhead("test");
+		const firstError = new NetworkError("connection reset");
+		const onCancelled = vi.fn();
+		const onCleanup = vi.fn();
+
+		ticket.cancel();
+
+		await runRetryLoop({
+			url: "http://example.test/resource",
+			requestOptions: {},
+			timeoutConfig: {},
+			retryConfig: { maxRetries: 3 },
+			ticket,
+			controller,
+			middleware: [],
+			bulkhead,
+			firstError,
+			onCancelled,
+			onCleanup,
+		});
+
+		// cancel() itself resolves the ticket; runRetryLoop's cancellation guard
+		// should still run its cleanup/onCancelled path rather than starting a retry.
+		expect(onCleanup).toHaveBeenCalled();
+		expect(onCancelled).toHaveBeenCalledWith(1);
+	});
+});

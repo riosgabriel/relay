@@ -1,33 +1,6 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpClient } from "../../src/core/client.js";
 import { parseRetryAfter } from "../../src/queue/executor.js";
-
-interface TestServer {
-	url: string;
-	close: () => Promise<void>;
-	setHandler: (fn: (req: IncomingMessage, res: ServerResponse) => void) => void;
-}
-
-function createTestServer(): Promise<TestServer> {
-	return new Promise((resolve) => {
-		let handler: (req: IncomingMessage, res: ServerResponse) => void = (_req, res) => {
-			res.writeHead(200, { "Content-Type": "application/json" });
-			res.end(JSON.stringify({ ok: true }));
-		};
-		const server = createServer((req, res) => handler(req, res));
-		server.listen(0, "127.0.0.1", () => {
-			const addr = server.address() as { port: number };
-			resolve({
-				url: `http://127.0.0.1:${addr.port}`,
-				close: () => new Promise((r) => server.close(() => r())),
-				setHandler: (fn) => {
-					handler = fn;
-				},
-			});
-		});
-	});
-}
 
 describe("parseRetryAfter", () => {
 	it("parses integer seconds into ms", () => {
@@ -45,114 +18,142 @@ describe("parseRetryAfter", () => {
 	});
 });
 
-describe("Retry-After honors", () => {
-	let server: TestServer;
-
-	beforeAll(async () => {
-		server = await createTestServer();
+/**
+ * These tests exercise the same "does Retry-After actually delay the retry"
+ * behavior the old real-server tests did, but drive it with fake timers over
+ * a mocked `fetch` instead of a real `node:http` server + real waits. That
+ * turns four ~1s+ real-clock tests into sub-millisecond, deterministic ones:
+ * the retry delay is advanced explicitly with `vi.advanceTimersByTimeAsync`
+ * rather than actually elapsing, and we assert the retry hasn't fired yet at
+ * `delay - epsilon` and has fired by `delay + epsilon`, which is what "delays
+ * the retry by ~N ms" actually means.
+ */
+describe("Retry-After honors (fake timers)", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
 	});
 
-	afterAll(async () => {
-		await server.close();
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
-	it("429 Retry-After: 1 delays the retry ~1s despite baseDelayMs 10", async () => {
-		const times: number[] = [];
-		server.setHandler((_req, res) => {
-			times.push(Date.now());
-			if (times.length === 1) {
-				res.writeHead(429, { "Retry-After": "1" });
-				res.end("too many");
-			} else {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-			}
+	function okResponse(): Response {
+		return new Response(JSON.stringify({ ok: true }), {
+			status: 200,
+			headers: { "Content-Type": "application/json" },
 		});
+	}
+
+	it("429 Retry-After: 1 delays the retry by ~1s despite baseDelayMs 10", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response("too many", { status: 429, headers: { "Retry-After": "1" } }))
+			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
-		const result = await client.get(`${server.url}/seconds`).toPromise();
 
+		const resultPromise = client.get("http://example.test/seconds").toPromise();
+
+		// First (real, but mocked-instant) attempt settles.
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// Not yet at the 1000ms Retry-After delay: no retry fired.
+		await vi.advanceTimersByTimeAsync(900);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// Past the delay: the retry fires.
+		await vi.advanceTimersByTimeAsync(150);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		const result = await resultPromise;
 		expect(result.success).toBe(true);
-		expect(times).toHaveLength(2);
-		expect(times[1] - times[0]).toBeGreaterThanOrEqual(950);
-	}, 10_000);
+	});
 
 	it("caps a long Retry-After at maxDelayMs", async () => {
-		const times: number[] = [];
-		server.setHandler((_req, res) => {
-			times.push(Date.now());
-			if (times.length === 1) {
-				res.writeHead(429, { "Retry-After": "120" });
-				res.end("too many");
-			} else {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-			}
-		});
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response("too many", { status: 429, headers: { "Retry-After": "120" } }))
+			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, maxDelayMs: 500, jitter: false } },
 		});
-		const result = await client.get(`${server.url}/capped`).toPromise();
 
+		const resultPromise = client.get("http://example.test/capped").toPromise();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// A 120s Retry-After should be capped to maxDelayMs (500ms), not honored raw.
+		await vi.advanceTimersByTimeAsync(499);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		const result = await resultPromise;
 		expect(result.success).toBe(true);
-		expect(times).toHaveLength(2);
-		// Capped to 500ms (not 120s). Node's localhost fetch can add up to ~2.5s
-		// of connection latency on the first re-fetch, so the ceiling is generous.
-		expect(times[1] - times[0]).toBeGreaterThanOrEqual(400);
-		expect(times[1] - times[0]).toBeLessThan(5000);
-	}, 10_000);
+	});
 
 	it("honors an HTTP-date Retry-After", async () => {
-		const times: number[] = [];
-		server.setHandler((_req, res) => {
-			times.push(Date.now());
-			if (times.length === 1) {
-				// ~2s ahead, truncated UP to a second boundary, so the parsed delay
-				// is reliably ≥ 1000ms (HTTP-date has whole-second resolution).
-				const date = new Date(Math.ceil((Date.now() + 2000) / 1000) * 1000).toUTCString();
-				res.writeHead(429, { "Retry-After": date });
-				res.end("too many");
-			} else {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-			}
-		});
+		// ~2s ahead. HTTP-date has whole-second resolution, so the delay
+		// `parseRetryAfter` actually computes from "now" can land anywhere in
+		// (2000, 3000]ms depending on the sub-second remainder at the moment
+		// the date string is built — compute it the same way the code under
+		// test does, rather than assuming an exact value, so the window below
+		// isn't flaky.
+		const retryAt = new Date(Date.now() + 2000).toUTCString();
+		const expectedDelayMs = parseRetryAfter(retryAt);
+		expect(expectedDelayMs).toBeGreaterThan(0);
+
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response("too many", { status: 429, headers: { "Retry-After": retryAt } }))
+			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
-		const result = await client.get(`${server.url}/http-date`).toPromise();
 
+		const resultPromise = client.get("http://example.test/http-date").toPromise();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync((expectedDelayMs as number) - 1);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		const result = await resultPromise;
 		expect(result.success).toBe(true);
-		expect(times).toHaveLength(2);
-		expect(times[1] - times[0]).toBeGreaterThanOrEqual(900);
-	}, 10_000);
+	});
 
 	it("falls back to backoff for garbage Retry-After", async () => {
-		const times: number[] = [];
-		server.setHandler((_req, res) => {
-			times.push(Date.now());
-			if (times.length === 1) {
-				res.writeHead(429, { "Retry-After": "soon" });
-				res.end("too many");
-			} else {
-				res.writeHead(200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify({ ok: true }));
-			}
-		});
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response("too many", { status: 429, headers: { "Retry-After": "soon" } }))
+			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
-		const result = await client.get(`${server.url}/garbage`).toPromise();
 
+		const resultPromise = client.get("http://example.test/garbage").toPromise();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		// Garbage Retry-After falls back to the 10ms backoff, nowhere near 1s.
+		await vi.advanceTimersByTimeAsync(10);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+
+		const result = await resultPromise;
 		expect(result.success).toBe(true);
-		expect(times).toHaveLength(2);
-		// Backoff is 10ms; allow generous headroom for localhost connection latency
-		// (which can reach ~2.5s). The point is the delay is nowhere near 1s+.
-		expect(times[1] - times[0]).toBeLessThan(3000);
-	}, 10_000);
+	});
 });
