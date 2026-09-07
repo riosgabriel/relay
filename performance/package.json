@@ -1,0 +1,38 @@
+{
+	"name": "vereda-benchmarks",
+	"version": "1.0.0",
+	"description": "Load testing, chaos engineering, and performance benchmarks for Vereda",
+	"type": "module",
+	"scripts": {
+		"bench": "tsx src/runner.ts",
+		"load:basic": "tsx load/basic-load-test.ts",
+		"load:stress": "tsx load/stress-test.ts",
+		"load:soak": "tsx load/soak-test.ts",
+		"chaos:network": "tsx chaos/network-chaos.ts",
+		"chaos:latency": "tsx chaos/latency-chaos.ts",
+		"chaos:failure": "tsx chaos/failure-chaos.ts",
+		"scenario:bulkhead": "tsx scenarios/bulkhead-scenario.ts",
+		"scenario:retry-storm": "tsx scenarios/retry-storm.ts",
+		"scenario:thundering-herd": "tsx scenarios/thundering-herd.ts",
+		"all": "tsx src/runner.ts",
+		"report": "tsx src/report.ts"
+	},
+	"keywords": [
+		"benchmark",
+		"load-testing",
+		"chaos-engineering",
+		"vereda"
+	],
+	"license": "MIT",
+	"engines": {
+		"node": ">=20"
+	},
+	"dependencies": {
+		"vereda": "file:.."
+	},
+	"devDependencies": {
+		"@types/node": "^26.4.1",
+		"tsx": "^4.23.13",
+		"typescript": "^7.0.2"
+	}
+}
