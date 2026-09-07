@@ -66,13 +66,41 @@ jobs:
       # EXPECTED_RUNTIME makes the runtime an assertion instead of an
       # assumption: test/core/retry-matrix.test.ts fails the run if the suite
       # is not executing under the runtime this leg is meant to cover.
+      # Coverage only runs once (node 20), not on all three legs — it's the
+      # same suite, just instrumented, so running it 3x would be pure waste.
       - name: Test
+        if: matrix.node-version != 20
         run: npm test
         env:
           EXPECTED_RUNTIME: node
 
+      - name: Test with coverage
+        if: matrix.node-version == 20
+        run: npm run test:coverage
+        env:
+          EXPECTED_RUNTIME: node
+
+      - name: Upload coverage report
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
       - name: Build
         run: npm run build
+
+      # Packaging hygiene from VRD-53 (package.json exports/types shape) stays
+      # enforced here so a future exports/package.json edit can't silently
+      # regress it. Runs once (node 20), against the just-built dist/.
+      - name: Verify package is publishable (publint)
+        if: matrix.node-version == 20
+        run: npx publint
+
+      - name: Verify package types resolve (arethetypeswrong)
+        if: matrix.node-version == 20
+        run: npx attw --pack .
 
   test-bun:
     name: test (bun runtime)
