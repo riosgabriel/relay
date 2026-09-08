@@ -1,6 +1,7 @@
 import * as http from "node:http";
 import { describe, expect, it } from "vitest";
 import { HttpClient } from "../../src/core/client.js";
+import { CircuitOpenError } from "../../src/core/errors.js";
 
 function createServer(
 	handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
@@ -93,6 +94,80 @@ describe("Partition snapshots (5.4)", () => {
 			expect(snapshots[0].name).toBe(host);
 			expect(snapshots[0].concurrency).toBe(3);
 			expect(snapshots[0].maxQueueSize).toBe(5);
+
+			await client.close();
+		} finally {
+			await close();
+		}
+	});
+});
+
+describe("Circuit breaker integration", () => {
+	it("stays inert (never short-circuits) when circuitBreaker is not configured", async () => {
+		let requestCount = 0;
+
+		const { url, close } = await createServer((_req, res) => {
+			requestCount++;
+			res.statusCode = 503;
+			res.end("error");
+		});
+
+		try {
+			const client = HttpClient.create({
+				baseUrl: url,
+				retry: { maxRetries: 0, retryOnStatus: [503] },
+			});
+
+			// No circuitBreaker config anywhere — the breaker must be fully inert
+			// (opt-in feature), so repeated failures never produce CircuitOpenError.
+			const r1 = await client.get("/a").toPromise();
+			const r2 = await client.get("/b").toPromise();
+
+			expect(requestCount).toBe(2);
+			expect(r1.success).toBe(false);
+			expect(r2.success).toBe(false);
+			if (!r1.success) expect(r1.error).not.toBeInstanceOf(CircuitOpenError);
+			if (!r2.success) expect(r2.error).not.toBeInstanceOf(CircuitOpenError);
+
+			await client.close();
+		} finally {
+			await close();
+		}
+	});
+
+	// NOTE: this test depends on evaluateTripCondition() (src/queue/circuit-breaker.ts),
+	// currently a TODO(human) stub that always returns false. Until it's implemented,
+	// the breaker never trips to "open", so the second request below reaches the
+	// server instead of being short-circuited — this test is EXPECTED TO FAIL.
+	it("opens the circuit after consecutive failures and short-circuits with CircuitOpenError", async () => {
+		let requestCount = 0;
+
+		const { url, host, close } = await createServer((_req, res) => {
+			requestCount++;
+			res.statusCode = 503;
+			res.end("error");
+		});
+
+		try {
+			const client = HttpClient.create({
+				baseUrl: url,
+				retry: { maxRetries: 0, retryOnStatus: [503] },
+				partitions: {
+					[host]: { circuitBreaker: { enabled: true, failureThreshold: 1 } },
+				},
+			});
+
+			// First request fails and should trip the breaker (failureThreshold: 1).
+			const r1 = await client.get("/a").toPromise();
+			expect(r1.success).toBe(false);
+			expect(requestCount).toBe(1);
+
+			// Second request should be short-circuited by the now-open breaker,
+			// never reaching the server.
+			const r2 = await client.get("/b").toPromise();
+			expect(requestCount).toBe(1);
+			expect(r2.success).toBe(false);
+			if (!r2.success) expect(r2.error).toBeInstanceOf(CircuitOpenError);
 
 			await client.close();
 		} finally {

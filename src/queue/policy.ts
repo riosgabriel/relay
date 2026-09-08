@@ -9,7 +9,7 @@ export interface RetryPolicyContext {
 
 export type RetryPolicy = (error: AppError, attempt: number, ctx: RetryPolicyContext) => boolean;
 
-const RETRIABLE_KINDS: ReadonlySet<AppError["kind"]> = new Set(["network", "timeout", "retryable_status"]);
+export const RETRIABLE_KINDS: ReadonlySet<AppError["kind"]> = new Set(["network", "timeout", "retryable_status"]);
 
 const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE"]);
 

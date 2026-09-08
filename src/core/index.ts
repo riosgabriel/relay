@@ -10,6 +10,7 @@ export { HttpClient, json } from "./client.js";
 export type { AppError } from "./errors.js";
 export {
 	CancelledError,
+	CircuitOpenError,
 	ConfigurationError,
 	DeadlineExceededError,
 	HttpError,
@@ -26,6 +27,7 @@ export { METRICS } from "./metrics.js";
 export type {
 	BackoffFn,
 	BackoffOptions,
+	CircuitBreakerConfig,
 	ClientConfig,
 	CloseOptions,
 	LifecycleEventMap,

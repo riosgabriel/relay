@@ -8,7 +8,8 @@ export type AppError =
 	| CancelledError
 	| QueueFullError
 	| ConfigurationError
-	| MaxRetriesExceededError;
+	| MaxRetriesExceededError
+	| CircuitOpenError;
 
 /**
  * Base class for failures that prevent a request from
@@ -135,5 +136,14 @@ export class MaxRetriesExceededError extends RequestError {
 		);
 		this.attempts = attempts;
 		this.lastError = lastError;
+	}
+}
+
+export class CircuitOpenError extends RequestError {
+	public readonly partition: string;
+
+	constructor(partition: string) {
+		super("circuit_open", `Circuit breaker is open for partition '${partition}'`);
+		this.partition = partition;
 	}
 }

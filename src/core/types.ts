@@ -64,6 +64,30 @@ export interface PartitionConfig {
 	limitFirstAttempts?: boolean;
 	retry?: RetryConfig;
 	timeout?: TimeoutConfig;
+	circuitBreaker?: CircuitBreakerConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Circuit breaker config
+// ---------------------------------------------------------------------------
+
+export interface CircuitBreakerConfig {
+	/** @default false */
+	enabled?: boolean;
+	/** Consecutive-failure trip mode (default strategy). @default 5 */
+	failureThreshold?: number;
+	/** Rolling-window trip mode. If set, used INSTEAD of failureThreshold. */
+	window?: {
+		sizeMs: number;
+		failureRatePercent: number;
+		minimumRequests: number;
+	};
+	/** ms to stay open before allowing a half-open trial. @default 30_000 */
+	resetTimeoutMs?: number;
+	/** concurrent trial requests allowed while half-open. @default 1 */
+	halfOpenMaxAttempts?: number;
+	/** Override default failure classification (network/timeout/retryable_status). */
+	isFailure?: (error: AppError) => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +164,8 @@ export type LifecycleEventMap = {
 		attempts: number;
 		durationMs: number;
 	};
+	circuitOpen: { partition: string };
+	circuitClose: { partition: string };
 };
 
 // ---------------------------------------------------------------------------
@@ -185,6 +211,8 @@ export interface ClientConfig {
 	 *  `{ concurrency: 5, maxQueueSize: 100 }`.
 	 *  @default {} */
 	partitions?: Record<string, PartitionConfig>;
+	/** Default circuit breaker config. Opt-in — inert unless `enabled: true`. */
+	circuitBreaker?: CircuitBreakerConfig;
 	/** Optional structured logger */
 	logger?: Logger;
 	/** Optional metrics sink for counters, histograms, and gauges. */
