@@ -44,3 +44,6 @@ Desktop.ini
 # Local planning docs
 PLAN.md
 TRACKER.md
+
+# Claude Code agent worktrees (isolated per-agent checkouts)
+.claude/worktrees/
