@@ -102,6 +102,41 @@ jobs:
         if: matrix.node-version == 20
         run: npx attw --pack .
 
+  # Canary, not a gate: TypeScript 7 gutted the classic `require("typescript")`
+  # compiler-API surface (only `version`/`versionMajorMinor` remain), which is
+  # why devDependencies pins ^6.0.0 and TypeDoc works at all today. This job
+  # tracks how far `src/` is from typechecking clean under 7 without blocking
+  # merges or the `ci` gate — `continue-on-error` and exclusion from `needs`
+  # below are both load-bearing.
+  typecheck-next:
+    name: typecheck (typescript next, informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Installed on top of (not via) the frozen lockfile: this overwrites
+      # node_modules/typescript in this job's runner only, and the direct
+      # binary path sidesteps an npx arg-parsing quirk with this package's
+      # bin resolution that otherwise misreads `tsc` itself as a root file.
+      - name: Install TypeScript 7
+        run: npm install --no-save typescript@^7
+
+      - name: Typecheck against TypeScript 7
+        run: |
+          ./node_modules/.bin/tsc --noEmit
+          ./node_modules/.bin/tsc --noEmit -p tsconfig.test.json
+          ./node_modules/.bin/tsc --noEmit -p examples/tsconfig.json
+
   test-bun:
     name: test (bun runtime)
     runs-on: ubuntu-latest
