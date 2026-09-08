@@ -1,0 +1,15 @@
+{
+	"$schema": "https://typedoc.org/schema.json",
+	"entryPoints": ["src/core/index.ts", "src/middleware/index.ts", "src/adapters/zod.ts"],
+	"out": "docs-site",
+	"name": "Vereda",
+	"readme": "README.md",
+	"excludeInternal": true,
+	"excludePrivate": true,
+	"excludeProtected": true,
+	"navigation": {
+		"includeCategories": false,
+		"includeGroups": true
+	},
+	"sort": ["source-order"]
+}

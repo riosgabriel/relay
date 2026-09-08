@@ -169,7 +169,7 @@ With zero configuration:
 ## Quick start
 
 ```bash
-npm install github:riosgabriel/vereda
+npm install vereda
 ```
 
 ```typescript
@@ -185,9 +185,7 @@ if (result.success) {
 }
 ```
 
-That's it. Vereda handles retries, backoff, timeouts, and isolation for you.
-
-Installing from GitHub runs the build via the `prepare` script, so `dist/` is ready as soon as installation finishes.
+That's it. Vereda handles retries, backoff, timeouts, and isolation for you. The package ships a prebuilt `dist/` — installing never compiles anything.
 
 ## Features
 
@@ -244,9 +242,9 @@ retry: {
 import { NetworkError } from "vereda";
 
 retry: {
-  maxAttempts: 5,
+  maxRetries: 5,
   retryWhen: (error, attempt) => {
-    if (error instanceof NetworkError && error.statusCode === 500) return false;
+    if (error instanceof NetworkError) return false;
     return true;
   },
 }
@@ -262,7 +260,7 @@ Retries honor a `Retry-After` response header (seconds or HTTP-date), capped at 
 
 ### Bulkhead isolation
 
-Every request is assigned to a partition, keyed by hostname by default. Each partition owns a concurrency limit plus a waiting queue. A slow or failing host fills its own queue without touching traffic to other hosts.
+Every request is assigned to a partition, keyed by host (hostname:port) by default — `http://api.example.com:8080` and `http://api.example.com:9090` land in separate partitions. Each partition owns a concurrency limit plus a waiting queue. A slow or failing host fills its own queue without touching traffic to other hosts.
 
 The concurrency limit and queue govern only **retry traffic** — the initial attempt always fires immediately and is never throttled by the bulkhead.
 
@@ -282,7 +280,7 @@ You can assign a partition explicitly for priority lanes or host grouping:
 client.get("/path", { partition: "high-priority" });
 ```
 
-When a partition's queue is full, the ticket resolves with a `NetworkError`. That is deliberate backpressure: the alternative is unbounded memory growth.
+When a partition's queue is full, the ticket resolves with a `QueueFullError`. That is deliberate backpressure: the alternative is unbounded memory growth.
 
 ### Timeouts
 
@@ -368,14 +366,17 @@ Middleware receives the same `AbortSignal` the request uses, so it can participa
 
 ### Lifecycle events
 
-The client emits typed events across all requests, useful for metrics, logging, and alerting:
+The client emits typed events across all requests, useful for metrics, logging, and alerting. Exactly one of `success`, `failure`, or `cancelled` fires per ticket:
 
 ```typescript
-client.on("request", ({ ticketId, url, method }) => {});
-client.on("retry",   ({ ticketId, url, attempt, delayMs }) => {});
-client.on("success", ({ ticketId, url, attempt }) => {});
-client.on("failure", ({ ticketId, url, error }) => {});
+client.on("request",   ({ ticketId, url, method, partition }) => {});
+client.on("retry",     ({ ticketId, url, attempt, delayMs, error }) => {});
+client.on("success",   ({ ticketId, url, attempts, durationMs, queuedMs, statusCode }) => {});
+client.on("failure",   ({ ticketId, url, attempts, durationMs, queuedMs, error }) => {});
+client.on("cancelled", ({ ticketId, url, attempts, durationMs }) => {});
 ```
+
+`retry`'s `attempt` is a zero-based retry index (`0` = the first retry, after the initial attempt). `off(event, listener)` removes a listener with the same signature as `on`.
 
 ### Cancellation
 
@@ -394,25 +395,37 @@ Cancellation wins over everything else. A cancelled request is never retried.
 
 ### Error handling
 
-Errors are a closed hierarchy under `RequestError`:
+Errors are a closed hierarchy under `RequestError`. Every class carries a readonly `kind` string discriminant — `AppError` is the union of all of them:
 
-| Error | Meaning | Notable fields |
-| --- | --- | --- |
-| `NetworkError` | Network failure or non-2xx response | `statusCode`, `response`, `cause` |
-| `TimeoutError` | Attempt exceeded `timeoutMs` | `url`, `timeoutMs` |
-| `ValidationError` | Response body failed `parse` (never retried) | `issues` |
-| `CancelledError` | Ticket cancelled or signal aborted | — |
-| `MaxRetriesExceededError` | All attempts exhausted | `attempts`, `lastError` |
+| Error | `kind` | Meaning | Notable fields |
+| --- | --- | --- | --- |
+| `NetworkError` | `"network"` | Request failed before a response arrived (DNS, connection reset, etc.) | `cause` |
+| `HttpError` | `"http"` | Non-2xx response outside `retry.retryOnStatus` (e.g. `404`) | `statusCode`, `response` |
+| `RetryableStatusError` | `"retryable_status"` | Non-2xx response matching `retry.retryOnStatus` (e.g. `503`) | `statusCode`, `response`, `retryAfterMs?` |
+| `TimeoutError` | `"timeout"` | Attempt exceeded `timeout.attemptMs` | `url`, `timeoutMs` |
+| `DeadlineExceededError` | `"deadline"` | Ticket exceeded `timeout.totalMs` (terminal — not retried) | `url`, `totalMs` |
+| `ValidationError` | `"validation"` | Response body failed `parse` (terminal — never retried) | `issues`, `cause` |
+| `CancelledError` | `"cancelled"` | Ticket cancelled or signal aborted (terminal) | — |
+| `QueueFullError` | `"queue_full"` | Partition's queue was full when a retry tried to enqueue (terminal) | `partition`, `queueSize`, `maxQueueSize` |
+| `ConfigurationError` | `"configuration"` | Invalid client/request config, or a body factory that threw (terminal) | `key` |
+| `MaxRetriesExceededError` | `"max_retries"` | All retries exhausted (terminal) | `attempts`, `lastError` |
+
+Only `network`, `timeout`, and `retryable_status` are retried by default — see [What gets retried](#what-gets-retried) above. Everything else is terminal: it resolves the ticket on the first attempt that produces it.
 
 ```typescript
-import { MaxRetriesExceededError, NetworkError } from "vereda";
+import { MaxRetriesExceededError, HttpError } from "vereda";
 
 const result = await ticket.toPromise();
 if (!result.success) {
-  if (result.error instanceof MaxRetriesExceededError) {
-    // result.error.lastError is the underlying error from the final attempt
-  } else if (result.error instanceof NetworkError) {
-    // result.error.statusCode, result.error.response
+  switch (result.error.kind) {
+    case "max_retries":
+      // result.error is MaxRetriesExceededError; .lastError is the final attempt's error
+      break;
+    case "http":
+      // result.error is HttpError; .statusCode, .response
+      break;
+    default:
+      console.error(result.error.message);
   }
 }
 ```
@@ -427,9 +440,16 @@ if (!result.success) {
 
 **Validation failures aren't transient.** A response that fails your `parse` function resolves immediately — retrying would parse the same payload again.
 
-## Status
+## Documentation
 
-> **⚠️ Early stage.** Vereda is experimental software. The API is small, tested, and MIT licensed, but it has not been hardened in production yet. Pin the version you depend on.
+- **[Operations guide](docs/operations.md)** — sizing concurrency and queues, `attemptMs` vs. `totalMs`, reading `partitions()`, wiring a metrics sink, the shutdown sequence, and log redaction.
+- **[API reference](https://riosgabriel.github.io/vereda/)** — generated from source via TypeDoc on every push to `main`; every public option documents its default.
+
+## Versioning and support
+
+Vereda follows [Semantic Versioning](https://semver.org/) from `1.0.0` onward: breaking changes land only in a major version, and anything scheduled for removal is deprecated in a minor release first and noted in [CHANGELOG.md](CHANGELOG.md) before it goes. The public surface is exactly what `src/core/index.ts`, `src/middleware/index.ts`, and `src/adapters/zod.ts` export — internals under `src/queue/` and `src/ticket/` are not part of the contract even though they're readable source.
+
+**Node support:** the currently supported line is whatever `engines.node` in `package.json` declares (`>=20` today); CI runs the full suite against Node 20, 22, and 24 on every change, so those three are the versions actually verified. The floor moves only in a major release.
 
 ## Development
 

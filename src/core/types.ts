@@ -33,11 +33,12 @@ export interface BackoffOptions {
 // ---------------------------------------------------------------------------
 
 export interface TimeoutConfig {
-	/** Per-attempt timeout in ms. Undefined means no per-attempt timeout. */
+	/** Per-attempt timeout in ms.
+	 *  @default undefined — no per-attempt timeout */
 	attemptMs?: number;
 	/** Whole-ticket deadline in ms. Starts at request(); cancels the ticket
-	 *  and resolves with DeadlineExceededError on expiry. Undefined means
-	 *  no total deadline. */
+	 *  and resolves with DeadlineExceededError on expiry.
+	 *  @default undefined — no total deadline */
 	totalMs?: number;
 }
 
@@ -52,11 +53,14 @@ export const DEFAULT_RETRY_ON_STATUS: number[] = [408, 425, 429, 500, 502, 503, 
 // ---------------------------------------------------------------------------
 
 export interface PartitionConfig {
-	/** Max concurrent in-flight retries for this partition */
+	/** Max concurrent in-flight retries for this partition.
+	 *  @default 5 */
 	concurrency?: number;
-	/** Max number of pending items in the queue before rejecting new ones */
+	/** Max number of pending items in the queue before rejecting new ones.
+	 *  @default 100 */
 	maxQueueSize?: number;
-	/** When true, the first attempt also goes through the bulkhead (R6). */
+	/** When true, the first attempt also goes through the bulkhead (R6).
+	 *  @default false */
 	limitFirstAttempts?: boolean;
 	retry?: RetryConfig;
 	timeout?: TimeoutConfig;
@@ -67,7 +71,11 @@ export interface PartitionConfig {
 // ---------------------------------------------------------------------------
 
 export interface RetryConfig {
+	/** Retries after the first attempt. `MaxRetriesExceededError.attempts` is
+	 *  total executions, i.e. `maxRetries + 1`.
+	 *  @default 3 */
 	maxRetries?: number;
+	/** @default `{ baseDelayMs: 200, maxDelayMs: 30_000, jitter: true }` */
 	backoff?: BackoffFn | BackoffOptions;
 	/** HTTP status codes that trigger retry (e.g. 408, 429, 500, 502, 503, 504).
 	 *  Default: [408, 425, 429, 500, 502, 503, 504] */
@@ -139,6 +147,7 @@ export type LifecycleEventMap = {
 // ---------------------------------------------------------------------------
 
 export interface RequestOptions<T = unknown> {
+	/** @default "GET" */
 	method?: string;
 	headers?: Record<string, string>;
 	/** Request body, or a factory that returns a fresh body on every attempt
@@ -169,15 +178,19 @@ export interface ClientConfig {
 	retry?: RetryConfig;
 	/** Default timeout config */
 	timeout?: TimeoutConfig;
-	/** Global concurrency across all partitions */
+	/** Global concurrency across all partitions.
+	 *  @default 50 */
 	concurrency?: number;
-	/** Per-partition overrides */
+	/** Per-partition overrides. Partitions not listed here use
+	 *  `{ concurrency: 5, maxQueueSize: 100 }`.
+	 *  @default {} */
 	partitions?: Record<string, PartitionConfig>;
 	/** Optional structured logger */
 	logger?: Logger;
 	/** Optional metrics sink for counters, histograms, and gauges. */
 	metrics?: MetricsSink;
-	/** Redact query parameter values in logged URLs (default: true). */
+	/** Redact query parameter values in logged URLs.
+	 *  @default true */
 	redactQuery?: boolean;
 	/** Custom fetch function (defaults to globalThis.fetch). */
 	fetch?: typeof globalThis.fetch;
