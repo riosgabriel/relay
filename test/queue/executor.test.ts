@@ -52,6 +52,9 @@ describe("executeRequest timeout/abort precedence", () => {
 				timeoutConfig,
 				retryConfig,
 				signal: ticketController.signal,
+				attempt: 0,
+				ticketId: "t1",
+				partition: "p1",
 			},
 			[],
 		);
@@ -86,6 +89,9 @@ describe("executeRequest timeout/abort precedence", () => {
 				timeoutConfig,
 				retryConfig,
 				signal: ticketController.signal,
+				attempt: 0,
+				ticketId: "t1",
+				partition: "p1",
 			},
 			[],
 		);
@@ -114,6 +120,9 @@ describe("executeRequest timeout/abort precedence", () => {
 				timeoutConfig,
 				retryConfig,
 				signal: ticketController.signal,
+				attempt: 0,
+				ticketId: "t1",
+				partition: "p1",
 			},
 			[],
 		);

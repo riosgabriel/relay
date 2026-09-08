@@ -54,7 +54,7 @@ describe("Injectable fetch (6.4)", () => {
 
 		expect(capturedInit).toBeDefined();
 		expect(capturedInit?.method).toBe("POST");
-		expect(capturedInit?.headers).toMatchObject({ "X-Custom": "yes" });
+		expect(new Headers(capturedInit?.headers).get("X-Custom")).toBe("yes");
 
 		await client.close();
 	});

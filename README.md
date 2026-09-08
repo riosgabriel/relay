@@ -348,7 +348,7 @@ if (result.success) {
 
 ### Middleware
 
-Middleware wraps every attempt (including retries) in the standard onion shape:
+Middleware wraps every attempt (including retries) in the standard onion shape. Each middleware receives a `RequestContext` — `{ url, method, headers, body, signal, attempt, ticketId, partition }`, where `headers` is a real `Headers` instance — and a `next` function that calls the next middleware (or the actual fetch):
 
 ```typescript
 import { defaultHeaders, requestLogger } from "vereda/middleware";
@@ -356,15 +356,17 @@ import { defaultHeaders, requestLogger } from "vereda/middleware";
 client.use(defaultHeaders({ Authorization: "Bearer token123" }));
 client.use(requestLogger());
 
-client.use(async (options, next) => {
-  console.log("Request:", options.url);
-  const response = await next(options);
+client.use(async (ctx, next) => {
+  console.log("Request:", ctx.url, "attempt", ctx.attempt);
+  const response = await next(ctx);
   console.log("Response:", response.status);
   return response;
 });
 ```
 
-Middleware receives the same `AbortSignal` the request uses, so it can participate in timeout and cancellation handling — but only if it observes or forwards that signal to the work it performs.
+Middleware can rewrite `ctx.url` before calling `next(ctx)` — whatever URL survives to the innermost middleware is what actually gets fetched. `defaultHeaders()` only sets a header the request doesn't already have; the comparison is case-insensitive, so a request-level `authorization` header always wins over a default `Authorization` one and you never end up sending both.
+
+Middleware receives the same `AbortSignal` the request uses (`ctx.signal`), so it can participate in timeout and cancellation handling — but only if it observes or forwards that signal to the work it performs.
 
 ### Lifecycle events
 

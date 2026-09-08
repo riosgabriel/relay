@@ -10,6 +10,11 @@ export interface ExecuteRequest {
 	timeoutConfig: TimeoutConfig;
 	retryConfig: RetryConfig;
 	signal: AbortSignal;
+	/** Which attempt this is: 0 = the first attempt, 1 = the first retry, etc.
+	 *  Exposed to middleware via `RequestContext.attempt`. */
+	attempt: number;
+	ticketId: string;
+	partition: string;
 	/** Custom fetch function. Falls back to globalThis.fetch. */
 	fetch?: typeof globalThis.fetch;
 }
@@ -47,13 +52,11 @@ export async function executeRequest(req: ExecuteRequest, middleware: Middleware
 	} else {
 		resolvedBody = options.body;
 	}
-	const resolvedOptions = { ...options, body: resolvedBody };
-
 	const timeoutMs = timeoutConfig.attemptMs;
 	const retryOnStatus = retryConfig.retryOnStatus ?? DEFAULT_RETRY_ON_STATUS;
 
 	// Build the fetch call wrapped in middleware
-	const fetchCall = buildFetchCall(url, resolvedOptions, req.fetch);
+	const fetchCall = buildFetchCall(req.fetch);
 	const composed = composeMiddleware(middleware, fetchCall);
 
 	// Merge the per-attempt signals with AbortSignal.any. It wires its sources
@@ -69,9 +72,23 @@ export async function executeRequest(req: ExecuteRequest, middleware: Middleware
 	const timeoutId =
 		timeoutController && timeoutMs !== undefined ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
 
+	// A fresh Headers instance per attempt: middleware (e.g. defaultHeaders)
+	// mutates ctx.headers in place, and that must never leak into the next
+	// retry's "starting" headers.
+	const ctx: RequestContext = {
+		url,
+		method: options.method ?? "GET",
+		headers: new Headers(options.headers),
+		body: resolvedBody,
+		signal: attemptSignal,
+		attempt: req.attempt,
+		ticketId: req.ticketId,
+		partition: req.partition,
+	};
+
 	let response: Response;
 	try {
-		response = await composed({ ...resolvedOptions, signal: attemptSignal });
+		response = await composed(ctx);
 		// The timeout may fire after fetch resolves but before this check runs;
 		// the timed-out attempt is not trustworthy, so it still surfaces as a
 		// timeout (cancellation is checked first in the catch path below).
@@ -177,44 +194,44 @@ export async function executeRequest(req: ExecuteRequest, middleware: Middleware
 // Middleware types + composition
 // ---------------------------------------------------------------------------
 
+/** What a middleware function sees and can rewrite for a single attempt.
+ *  `headers` is a real `Headers` instance (case-insensitive lookups/sets) and
+ *  is fresh per attempt — mutating it does not affect other attempts or the
+ *  caller's original `RequestOptions`. */
 export interface RequestContext {
 	url: string;
-	method?: string;
-	headers: Record<string, string>;
-	body?: BodyInit | (() => BodyInit);
+	method: string;
+	headers: Headers;
+	body?: BodyInit;
 	signal: AbortSignal;
+	/** 0 = the first attempt, 1 = the first retry, etc. */
 	attempt: number;
 	ticketId: string;
 	partition: string;
 }
 
-export type NextFn = (options: RequestOptions<unknown>) => Promise<Response>;
-export type MiddlewareFn = (options: RequestOptions<unknown>, next: NextFn) => Promise<Response>;
+export type NextFn = (ctx: RequestContext) => Promise<Response>;
+export type MiddlewareFn = (ctx: RequestContext, next: NextFn) => Promise<Response>;
 
-function buildFetchCall(
-	url: string,
-	_baseOptions: RequestOptions<unknown>,
-	customFetch?: typeof globalThis.fetch,
-): NextFn {
+function buildFetchCall(customFetch?: typeof globalThis.fetch): NextFn {
 	const fetchFn = customFetch ?? globalThis.fetch.bind(globalThis);
-	return async (options: RequestOptions<unknown>): Promise<Response> => {
-		const body = options.body as BodyInit | undefined;
+	return async (ctx: RequestContext): Promise<Response> => {
 		const init: RequestInit = {
-			method: options.method ?? "GET",
-			headers: options.headers,
-			body,
-			signal: options.signal,
+			method: ctx.method,
+			headers: ctx.headers,
+			body: ctx.body,
+			signal: ctx.signal,
 		};
-		if (isReadableStream(body)) {
+		if (isReadableStream(ctx.body)) {
 			// Node's fetch requires duplex: "half" for stream bodies.
 			(init as { duplex?: "half" }).duplex = "half";
 		}
-		return fetchFn(url, init);
+		return fetchFn(ctx.url, init);
 	};
 }
 
 export function composeMiddleware(middlewares: MiddlewareFn[], core: NextFn): NextFn {
-	return middlewares.reduceRight<NextFn>((next, middleware) => (options) => middleware(options, next), core);
+	return middlewares.reduceRight<NextFn>((next, middleware) => (ctx) => middleware(ctx, next), core);
 }
 
 // ---------------------------------------------------------------------------

@@ -291,11 +291,9 @@ describe("HttpClient integration", () => {
 			res.end("{}");
 		});
 		const middlewareClient = HttpClient.create();
-		middlewareClient.use(async (options, next) => {
-			return next({
-				...options,
-				headers: { ...options.headers, "x-custom": "relay-test" },
-			});
+		middlewareClient.use(async (ctx, next) => {
+			ctx.headers.set("x-custom", "relay-test");
+			return next(ctx);
 		});
 		await middlewareClient.get(`${server.url}/headers`).toPromise();
 		expect(receivedHeader).toBe("relay-test");

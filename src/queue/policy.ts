@@ -2,7 +2,7 @@ import type { AppError } from "../core/errors.js";
 
 export interface RetryPolicyContext {
 	method: string;
-	headers?: Record<string, string>;
+	headers?: HeadersInit;
 	/** value of merged retry.idempotent for this request */
 	idempotent?: boolean;
 }
@@ -28,7 +28,7 @@ export function defaultRetryPolicy(error: AppError, _attempt: number, ctx: Retry
 	// Rule 3 — the request must be safe to repeat (idempotent by method or opt-in).
 	if (IDEMPOTENT_METHODS.has(ctx.method.toUpperCase())) return true;
 	if (ctx.idempotent) return true;
-	if (ctx.headers && hasHeader(ctx.headers, "idempotency-key")) return true;
+	if (ctx.headers && new Headers(ctx.headers).has("idempotency-key")) return true;
 	return false;
 }
 
@@ -46,13 +46,4 @@ export function shouldRetry(
 	if (!defaultRetryPolicy(error, attempt, ctx)) return false;
 	if (retryWhen && !retryWhen(error, attempt)) return false;
 	return true;
-}
-
-/** Case-insensitive lookup on a plain header Record. */
-function hasHeader(headers: Record<string, string>, name: string): boolean {
-	const lower = name.toLowerCase();
-	for (const key of Object.keys(headers)) {
-		if (key.toLowerCase() === lower) return true;
-	}
-	return false;
 }

@@ -1,17 +1,21 @@
-export type { MiddlewareFn, NextFn } from "../queue/executor.js";
+export type { MiddlewareFn, NextFn, RequestContext } from "../queue/executor.js";
 
 /**
- * Adds a base set of headers to every request.
+ * Adds a base set of headers to every request. Only sets a header the
+ * request doesn't already have — comparison is case-insensitive, so a
+ * request-level `authorization` header wins over a default `Authorization`.
  *
  * @example
  * client.use(defaultHeaders({ 'X-Api-Key': 'secret' }));
  */
-export function defaultHeaders(headers: Record<string, string>): import("../queue/executor.js").MiddlewareFn {
-	return async (options, next) => {
-		return next({
-			...options,
-			headers: { ...headers, ...options.headers },
-		});
+export function defaultHeaders(headers: HeadersInit): import("../queue/executor.js").MiddlewareFn {
+	return async (ctx, next) => {
+		for (const [key, value] of new Headers(headers)) {
+			if (!ctx.headers.has(key)) {
+				ctx.headers.set(key, value);
+			}
+		}
+		return next(ctx);
 	};
 }
 
@@ -27,17 +31,19 @@ export function requestLogger(options?: {
 	// biome-ignore lint/suspicious/noConsole: console is the intended default sink for this opt-in logger middleware; callers override it via options.log.
 	const log = options?.log ?? ((msg, meta) => console.log(msg, meta));
 
-	return async (reqOptions, next) => {
+	return async (ctx, next) => {
 		const start = Date.now();
 		try {
-			const response = await next(reqOptions);
+			const response = await next(ctx);
 			log("Request completed", {
+				url: ctx.url,
 				status: response.status,
 				durationMs: Date.now() - start,
 			});
 			return response;
 		} catch (err) {
 			log("Request failed", {
+				url: ctx.url,
 				error: err instanceof Error ? err.message : String(err),
 				durationMs: Date.now() - start,
 			});

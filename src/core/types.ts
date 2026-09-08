@@ -140,7 +140,7 @@ export type LifecycleEventMap = {
 
 export interface RequestOptions<T = unknown> {
 	method?: string;
-	headers?: Record<string, string>;
+	headers?: HeadersInit;
 	/** Request body, or a factory that returns a fresh body on every attempt
 	 *  (replayable body). A ReadableStream must be supplied via a factory. The
 	 *  factory must return a fresh body each invocation — reusing the same
