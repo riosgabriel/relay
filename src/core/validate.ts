@@ -23,6 +23,11 @@ export function validateConfig(config: ClientConfig): void {
 		}
 	}
 
+	if (!config.timeout || config.timeout.attemptMs === undefined) {
+		throw new ConfigurationError(
+			"timeout.attemptMs is required — pass a positive number, or Infinity to explicitly opt out of a per-attempt timeout",
+		);
+	}
 	validateTimeoutConfig(config.timeout, "timeout");
 	validateRetryConfig(config.retry, "retry");
 	validatePartitions(config.partitions);

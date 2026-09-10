@@ -189,7 +189,7 @@ describe("retry behavior matrix", () => {
 
 	beforeAll(async () => {
 		server = await createTestServer();
-		client = HttpClient.create();
+		client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 	});
 
 	afterAll(async () => {

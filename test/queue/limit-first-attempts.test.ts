@@ -31,6 +31,7 @@ describe("Optional first-attempt limiting (5.5)", () => {
 		try {
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				concurrency: 10,
 				retry: { maxRetries: 0 },
 				partitions: {
@@ -80,6 +81,7 @@ describe("Optional first-attempt limiting (5.5)", () => {
 
 			const client = HttpClient.create({
 				baseUrl: trackUrl,
+				timeout: { attemptMs: 5_000 },
 				concurrency: 10,
 				retry: { maxRetries: 0 },
 				partitions: {

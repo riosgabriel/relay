@@ -1,16 +1,26 @@
-import { buildBackoffFn } from "../core/backoff.js";
+import { buildBackoffFn, DEFAULT_MAX_DELAY_MS } from "../core/backoff.js";
 import type { AppError } from "../core/errors.js";
 import {
 	CancelledError,
+	CircuitOpenError,
 	DeadlineExceededError,
 	MaxRetriesExceededError,
+	NO_TIMEOUT_CONFIGURED,
 	QueueFullError,
 	RetryableStatusError,
 	TimeoutError,
 } from "../core/errors.js";
-import type { BackoffOptions, RequestOptions, RetryConfig, TimeoutConfig } from "../core/types.js";
+import {
+	type BackoffOptions,
+	DEFAULT_MAX_RETRIES,
+	isBoundedMs,
+	type RequestOptions,
+	type RetryConfig,
+	type TimeoutConfig,
+} from "../core/types.js";
 import type { Ticket, TicketController } from "../ticket/ticket.js";
 import type { Bulkhead } from "./bulkhead.js";
+import type { CircuitBreaker } from "./circuit-breaker.js";
 import { executeRequest, type MiddlewareFn } from "./executor.js";
 import { type RetryPolicyContext, shouldRetry } from "./policy.js";
 import type { Semaphore } from "./semaphore.js";
@@ -27,6 +37,10 @@ export interface RetryJobOptions {
 	bulkhead: Bulkhead;
 	/** Global concurrency semaphore acquired after the partition slot (D4). */
 	semaphore?: Semaphore;
+	/** Per-partition circuit breaker. Inert unless configured/enabled. */
+	circuitBreaker: CircuitBreaker;
+	/** Partition name, used to construct CircuitOpenError when the breaker is open. */
+	partition: string;
 	/** The error from the first attempt (fired client-side before queuing). */
 	firstError: AppError;
 	onRetry?: (attempt: number, delayMs: number, error: AppError) => void;
@@ -56,6 +70,8 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 		middleware,
 		bulkhead,
 		semaphore,
+		circuitBreaker,
+		partition,
 		firstError,
 		onRetry,
 		onSuccess,
@@ -65,12 +81,12 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 		fetch: customFetch,
 	} = job;
 
-	const maxRetries = retryConfig.maxRetries ?? 3;
+	const maxRetries = retryConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
 	const backoffFn = buildBackoffFn(retryConfig.backoff);
 	const backoffCap =
 		retryConfig.backoff && typeof retryConfig.backoff === "object"
-			? ((retryConfig.backoff as BackoffOptions).maxDelayMs ?? 30_000)
-			: 30_000;
+			? ((retryConfig.backoff as BackoffOptions).maxDelayMs ?? DEFAULT_MAX_DELAY_MS)
+			: DEFAULT_MAX_DELAY_MS;
 
 	let lastError: AppError = firstError;
 	let totalAttempts = 1; // first attempt already fired client-side
@@ -83,6 +99,14 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 				success: false,
 				error: new CancelledError(),
 			} as never);
+			return;
+		}
+
+		if (!circuitBreaker.canRequest()) {
+			onCleanup?.();
+			const error = new CircuitOpenError(partition);
+			onFailure?.(error, totalAttempts);
+			controller.markDone({ success: false, error } as never);
 			return;
 		}
 
@@ -114,7 +138,7 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 			// user cancellation: deadline only aborts the signal (abortSignal()),
 			// while user cancellation sets _cancelled = true via cancel().
 			onCleanup?.();
-			if (!ticket.isCancelled && timeoutConfig.totalMs !== undefined) {
+			if (!ticket.isCancelled && isBoundedMs(timeoutConfig.totalMs)) {
 				const error = new DeadlineExceededError(url, timeoutConfig.totalMs);
 				onFailure?.(error, totalAttempts);
 				controller.markDone({
@@ -179,6 +203,7 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 
 		switch (result.kind) {
 			case "success": {
+				circuitBreaker.recordSuccess();
 				onCleanup?.();
 				if (result.result.success) {
 					onSuccess?.(result.result.raw.status, totalAttempts);
@@ -189,7 +214,7 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 
 			case "cancelled":
 				onCleanup?.();
-				if (!ticket.isCancelled && timeoutConfig.totalMs !== undefined) {
+				if (!ticket.isCancelled && isBoundedMs(timeoutConfig.totalMs)) {
 					const error = new DeadlineExceededError(url, timeoutConfig.totalMs);
 					onFailure?.(error, totalAttempts);
 					controller.markDone({
@@ -206,11 +231,13 @@ export async function runRetryLoop(job: RetryJobOptions): Promise<void> {
 				return;
 
 			case "timeout":
-				lastError = new TimeoutError(url, timeoutConfig.attemptMs ?? 0);
+				lastError = new TimeoutError(url, timeoutConfig.attemptMs ?? NO_TIMEOUT_CONFIGURED);
+				circuitBreaker.recordFailure(lastError);
 				break;
 
 			case "error":
 				lastError = result.error;
+				circuitBreaker.recordFailure(lastError);
 				break;
 		}
 	}

@@ -45,5 +45,6 @@ Desktop.ini
 PLAN.md
 TRACKER.md
 
-# Claude Code agent worktrees (isolated per-agent checkouts)
+# Agent worktrees (each has its own biome.json, which trips up a repo-root
+# biome scan if not excluded)
 .claude/worktrees/

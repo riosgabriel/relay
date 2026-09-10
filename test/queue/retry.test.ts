@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { NetworkError } from "../../src/core/errors.js";
 import { Bulkhead } from "../../src/queue/bulkhead.js";
+import { CircuitBreaker } from "../../src/queue/circuit-breaker.js";
 import { runRetryLoop } from "../../src/queue/retry.js";
 import { createTicket } from "../../src/ticket/ticket.js";
+
+// A disabled breaker is always inert (canRequest() always true, record*() no-ops),
+// so it's safe to pass into every test here that isn't exercising the breaker itself.
+const disabledBreaker = () => new CircuitBreaker("test", { enabled: false });
 
 describe("runRetryLoop", () => {
 	it("with maxRetries: 0, marks done with the raw first error (never wraps in MaxRetriesExceededError)", async () => {
@@ -20,6 +25,8 @@ describe("runRetryLoop", () => {
 			controller,
 			middleware: [],
 			bulkhead,
+			circuitBreaker: disabledBreaker(),
+			partition: "test",
 			firstError,
 			onFailure,
 		});
@@ -49,6 +56,8 @@ describe("runRetryLoop", () => {
 			controller,
 			middleware: [],
 			bulkhead,
+			circuitBreaker: disabledBreaker(),
+			partition: "test",
 			firstError,
 			onCancelled,
 			onCleanup,

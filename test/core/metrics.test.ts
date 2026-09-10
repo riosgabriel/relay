@@ -60,7 +60,7 @@ describe("Metrics sink (6.2)", () => {
 
 	it("records counter for one successful request", async () => {
 		const sink = createFakeSink();
-		const client = HttpClient.create({ metrics: sink });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, metrics: sink });
 
 		server.setHandler((_req, res) => {
 			res.writeHead(200, { "Content-Type": "application/json" });
@@ -90,6 +90,7 @@ describe("Metrics sink (6.2)", () => {
 	it("records retries and duration for exhausted retry", async () => {
 		const sink = createFakeSink();
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			metrics: sink,
 			retry: {
 				maxRetries: 2,
@@ -125,7 +126,7 @@ describe("Metrics sink (6.2)", () => {
 
 	it("records gauge for in-flight count", async () => {
 		const sink = createFakeSink();
-		const client = HttpClient.create({ metrics: sink });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, metrics: sink });
 
 		server.setHandler((_req, res) => {
 			res.writeHead(200, { "Content-Type": "application/json" });
@@ -144,7 +145,7 @@ describe("Metrics sink (6.2)", () => {
 	});
 
 	it("does not record metrics when no sink is configured", async () => {
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 
 		server.setHandler((_req, res) => {
 			res.writeHead(200, { "Content-Type": "application/json" });

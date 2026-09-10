@@ -140,7 +140,7 @@ describe("idempotency gate (integration)", () => {
 
 	it("POST 500 → exactly 1 request, raw RetryableStatusError", async () => {
 		const getHits = serve500();
-		const client = HttpClient.create({ retry: fastRetry });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, retry: fastRetry });
 		const result = await client.post(`${server.url}/post`).toPromise();
 
 		expect(getHits()).toBe(1);
@@ -153,7 +153,7 @@ describe("idempotency gate (integration)", () => {
 
 	it("POST 500 with retry.idempotent → 4 requests, MaxRetriesExceededError attempts=4", async () => {
 		const getHits = serve500();
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.post(`${server.url}/post-idempotent`, undefined, {
 				retry: { ...fastRetry, idempotent: true },
@@ -170,7 +170,7 @@ describe("idempotency gate (integration)", () => {
 
 	it("POST 500 with Idempotency-Key header → 4 requests", async () => {
 		const getHits = serve500();
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.post(`${server.url}/post-key`, undefined, {
 				headers: { "Idempotency-Key": "abc-123" },
@@ -188,7 +188,7 @@ describe("idempotency gate (integration)", () => {
 
 	it("GET 500 → 4 requests", async () => {
 		const getHits = serve500();
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client.get(`${server.url}/get`, { retry: fastRetry }).toPromise();
 
 		expect(getHits()).toBe(4);
@@ -201,7 +201,7 @@ describe("idempotency gate (integration)", () => {
 
 	it("GET 500 with retryWhen: () => false → 1 request", async () => {
 		const getHits = serve500();
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.get(`${server.url}/get-veto`, {
 				retry: { ...fastRetry, retryWhen: () => false },

@@ -8,7 +8,8 @@ export type AppError =
 	| CancelledError
 	| QueueFullError
 	| ConfigurationError
-	| MaxRetriesExceededError;
+	| MaxRetriesExceededError
+	| CircuitOpenError;
 
 /**
  * Base class for failures that prevent a request from
@@ -60,13 +61,19 @@ export class RetryableStatusError extends RequestError {
 	}
 }
 
+/** Sentinel `timeoutMs` value reported on `TimeoutError` when no per-attempt
+ *  timeout (`TimeoutConfig.attemptMs`) was configured. Callers that construct
+ *  a `TimeoutError` for an unconfigured timeout should pass this instead of
+ *  a bare `0` so there is one place this convention is spelled out. */
+export const NO_TIMEOUT_CONFIGURED = 0;
+
 export class TimeoutError extends RequestError {
 	public readonly timeoutMs: number;
 	public readonly url: string;
 
 	constructor(url: string, timeoutMs: number) {
 		const message =
-			timeoutMs > 0
+			timeoutMs > NO_TIMEOUT_CONFIGURED
 				? `Request to ${url} timed out after ${timeoutMs}ms`
 				: `Request to ${url} timed out (no timeout configured)`;
 		super("timeout", message);
@@ -135,5 +142,14 @@ export class MaxRetriesExceededError extends RequestError {
 		);
 		this.attempts = attempts;
 		this.lastError = lastError;
+	}
+}
+
+export class CircuitOpenError extends RequestError {
+	public readonly partition: string;
+
+	constructor(partition: string) {
+		super("circuit_open", `Circuit breaker is open for partition '${partition}'`);
+		this.partition = partition;
 	}
 }

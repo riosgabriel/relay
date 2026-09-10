@@ -26,7 +26,7 @@ describe("Origin partition key (5.3)", () => {
 		const server2 = await createServer();
 
 		try {
-			const client = HttpClient.create({ retry: { maxRetries: 0 } });
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, retry: { maxRetries: 0 } });
 
 			await client.get(server1.url).toPromise();
 			await client.get(server2.url).toPromise();
@@ -50,7 +50,7 @@ describe("Origin partition key (5.3)", () => {
 		const server = await createServer();
 
 		try {
-			const client = HttpClient.create({ retry: { maxRetries: 0 } });
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, retry: { maxRetries: 0 } });
 
 			await client.get(`${server.url}/a`).toPromise();
 			await client.get(`${server.url}/b`).toPromise();
@@ -69,7 +69,7 @@ describe("Origin partition key (5.3)", () => {
 		const server = await createServer();
 
 		try {
-			const client = HttpClient.create({ retry: { maxRetries: 0 } });
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, retry: { maxRetries: 0 } });
 
 			await client.get(server.url, { partition: "custom" }).toPromise();
 

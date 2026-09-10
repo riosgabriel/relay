@@ -30,7 +30,7 @@ describe("README middleware example", () => {
 	});
 
 	it("wires defaultHeaders, requestLogger, and a custom middleware that reads ctx", async () => {
-		const client = HttpClient.create({ baseUrl: url });
+		const client = HttpClient.create({ baseUrl: url, timeout: { attemptMs: 5_000 } });
 		const logged: Array<[string, Record<string, unknown>]> = [];
 
 		client.use(defaultHeaders({ Authorization: "Bearer token123" }));
@@ -51,7 +51,7 @@ describe("README middleware example", () => {
 	});
 
 	it("lets middleware rewrite ctx.url before the request is sent", async () => {
-		const client = HttpClient.create({ baseUrl: url });
+		const client = HttpClient.create({ baseUrl: url, timeout: { attemptMs: 5_000 } });
 
 		client.use(async (ctx, next) => {
 			return next({ ...ctx, url: `${ctx.url}?rewritten=1` });

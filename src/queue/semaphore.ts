@@ -1,19 +1,22 @@
 import { QueueFullError } from "../core/errors.js";
+import { DEFAULT_GLOBAL_QUEUE_SIZE } from "../core/types.js";
 
 /**
  * A counting semaphore that limits total concurrent executions across all
- * partitions (the global concurrency cap, default 50 — decision D1).
+ * partitions (the global concurrency cap — decision D1, see
+ * `ClientConfig.concurrency` / `DEFAULT_GLOBAL_CONCURRENCY` for the default).
  *
  * Each `acquire()` returns a `release` callback. When no permit is available
- * the caller is queued (up to `maxQueueSize`) and resolved when a permit is
- * released. Exceeding the queue limit rejects immediately with QueueFullError.
+ * the caller is queued (up to `maxQueueSize`, see `ClientConfig.maxQueueSize` /
+ * `DEFAULT_GLOBAL_QUEUE_SIZE`) and resolved when a permit is released.
+ * Exceeding the queue limit rejects immediately with QueueFullError.
  */
 export class Semaphore {
 	private available: number;
 	private readonly waitQueue: Array<() => void> = [];
 	private readonly maxQueueSize: number;
 
-	constructor(permits: number, maxQueueSize = 100) {
+	constructor(permits: number, maxQueueSize = DEFAULT_GLOBAL_QUEUE_SIZE) {
 		this.available = permits;
 		this.maxQueueSize = maxQueueSize;
 	}

@@ -34,4 +34,6 @@ export const METRICS = {
 	QUEUE_DEPTH: "vereda.queue_depth",
 	/** Current in-flight requests across all partitions. */
 	IN_FLIGHT: "vereda.in_flight",
+	/** Total circuit breaker trips to open. Tags: partition. */
+	CIRCUIT_OPEN: "vereda.circuit_open",
 } as const;

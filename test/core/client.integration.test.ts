@@ -149,6 +149,7 @@ describe("HttpClient integration", () => {
 		});
 		// 404 is not in retryOnStatus → HttpError, non-retryable → resolves immediately
 		const noRetryClient = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: { maxRetries: 1 },
 		});
 		const result = await noRetryClient.get(`${server.url}/missing`).toPromise();
@@ -194,6 +195,7 @@ describe("HttpClient integration", () => {
 			});
 
 			const isoClient = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 3,
 					retryOnStatus: [429],
@@ -239,6 +241,7 @@ describe("HttpClient integration", () => {
 			});
 
 			const isoClient = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 3,
 					retryOnStatus: [429],
@@ -290,7 +293,7 @@ describe("HttpClient integration", () => {
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end("{}");
 		});
-		const middlewareClient = HttpClient.create();
+		const middlewareClient = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		middlewareClient.use(async (ctx, next) => {
 			ctx.headers.set("x-custom", "relay-test");
 			return next(ctx);
@@ -370,7 +373,7 @@ describe("HttpClient integration", () => {
 	}, 5_000);
 
 	it("resolves relative URL without baseUrl as a ticket error", async () => {
-		const clientNoBase = HttpClient.create();
+		const clientNoBase = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const ticket = clientNoBase.get("/relative");
 		const result = await ticket.toPromise();
 
@@ -389,6 +392,7 @@ describe("HttpClient integration", () => {
 		});
 
 		const retryClient = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries,
 				retryOnStatus: [503],
@@ -423,6 +427,7 @@ describe("HttpClient integration", () => {
 		});
 
 		const retryClient = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 1,
 				retryOnStatus: [503],
@@ -489,6 +494,7 @@ describe("HttpClient integration", () => {
 		const listenersBefore = getEventListeners(controller.signal, "abort").length;
 
 		const retryClient = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: { maxRetries: 3, backoff: { baseDelayMs: 10, jitter: false } },
 		});
 
@@ -617,7 +623,7 @@ describe("HttpClient integration", () => {
 
 	describe("graceful shutdown (O4)", () => {
 		it("rejects new requests after close({ drain: false })", async () => {
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			void client.close({ drain: false });
 
 			expect(() => client.get(`${server.url}/test`)).toThrow(ConfigurationError);
@@ -635,7 +641,7 @@ describe("HttpClient integration", () => {
 				});
 			});
 
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			const ticket = client.get(`${server.url}/slow`, {
 				retry: { maxRetries: 0 },
 			});
@@ -662,7 +668,7 @@ describe("HttpClient integration", () => {
 				res.end(JSON.stringify({ ok: true }));
 			});
 
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			const ticket = client.get(`${server.url}/fast`, {
 				retry: { maxRetries: 0 },
 			});
@@ -686,7 +692,7 @@ describe("HttpClient integration", () => {
 				});
 			});
 
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			const ticket = client.get(`${server.url}/slow`, {
 				retry: { maxRetries: 0 },
 			});
@@ -707,7 +713,7 @@ describe("HttpClient integration", () => {
 		});
 
 		it("close is idempotent", async () => {
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			await client.close({ drain: false });
 			await client.close({ drain: false }); // should not throw
 		});
@@ -719,7 +725,7 @@ describe("HttpClient integration", () => {
 				res.end(JSON.stringify({ error: "unavailable" }));
 			});
 
-			const client = HttpClient.create();
+			const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 			const ticket = client.get(`${server.url}/always-503`, {
 				retry: { maxRetries: 5, backoff: { baseDelayMs: 1000, jitter: false } },
 			});

@@ -1,7 +1,11 @@
 import type { BackoffFn, BackoffOptions } from "./types.js";
 
-const DEFAULT_BASE_DELAY_MS = 200;
-const DEFAULT_MAX_DELAY_MS = 30_000;
+/** Default base delay in ms for exponential backoff. */
+export const DEFAULT_BASE_DELAY_MS = 200;
+/** Default max delay cap in ms for exponential backoff. */
+export const DEFAULT_MAX_DELAY_MS = 30_000;
+/** Default jitter setting for exponential backoff. */
+export const DEFAULT_JITTER = true;
 
 export function buildBackoffFn(config?: BackoffFn | BackoffOptions): BackoffFn {
 	if (typeof config === "function") {
@@ -10,7 +14,7 @@ export function buildBackoffFn(config?: BackoffFn | BackoffOptions): BackoffFn {
 
 	const baseDelayMs = config?.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
 	const maxDelayMs = config?.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
-	const jitter = config?.jitter ?? true;
+	const jitter = config?.jitter ?? DEFAULT_JITTER;
 
 	return (attempt: number): number => {
 		const exponential = baseDelayMs * 2 ** attempt;

@@ -1,10 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { ConfigurationError } from "../../src/core/errors.js";
+import type { ClientConfig } from "../../src/core/types.js";
 import { validateConfig, validateRequestBody } from "../../src/core/validate.js";
 
 describe("validateConfig", () => {
-	it("accepts valid empty config", () => {
-		expect(() => validateConfig({})).not.toThrow();
+	it("accepts a minimal config with only timeout set", () => {
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 } })).not.toThrow();
+	});
+
+	it("throws ConfigurationError when timeout is entirely missing", () => {
+		expect(() => validateConfig({} as ClientConfig)).toThrow(ConfigurationError);
+		expect(() => validateConfig({} as ClientConfig)).toThrow(/timeout\.attemptMs is required/);
+	});
+
+	it("throws ConfigurationError when timeout is present but attemptMs is omitted", () => {
+		expect(() => validateConfig({ timeout: {} } as ClientConfig)).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: {} } as ClientConfig)).toThrow(/timeout\.attemptMs is required/);
+	});
+
+	it("accepts timeout.attemptMs: Infinity as an explicit opt-out of a per-attempt timeout", () => {
+		expect(() => validateConfig({ timeout: { attemptMs: Infinity } })).not.toThrow();
 	});
 
 	it("accepts valid full config", () => {
@@ -25,23 +40,27 @@ describe("validateConfig", () => {
 	});
 
 	it("rejects negative concurrency", () => {
-		expect(() => validateConfig({ concurrency: -1 })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, concurrency: -1 })).toThrow(ConfigurationError);
 	});
 
 	it("rejects zero concurrency", () => {
-		expect(() => validateConfig({ concurrency: 0 })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, concurrency: 0 })).toThrow(ConfigurationError);
 	});
 
 	it("rejects non-integer concurrency", () => {
-		expect(() => validateConfig({ concurrency: 1.5 })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, concurrency: 1.5 })).toThrow(ConfigurationError);
 	});
 
 	it("rejects maxQueueSize < 1", () => {
-		expect(() => validateConfig({ partitions: { x: { maxQueueSize: 0 } } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, partitions: { x: { maxQueueSize: 0 } } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects negative maxRetries", () => {
-		expect(() => validateConfig({ retry: { maxRetries: -1 } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { maxRetries: -1 } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects timeout attemptMs <= 0", () => {
@@ -55,45 +74,60 @@ describe("validateConfig", () => {
 	it("rejects baseDelayMs > maxDelayMs", () => {
 		expect(() =>
 			validateConfig({
+				timeout: { attemptMs: 5_000 },
 				retry: { backoff: { baseDelayMs: 1000, maxDelayMs: 100 } },
 			}),
 		).toThrow(ConfigurationError);
 	});
 
 	it("rejects negative baseDelayMs", () => {
-		expect(() => validateConfig({ retry: { backoff: { baseDelayMs: -1 } } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { backoff: { baseDelayMs: -1 } } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects negative maxDelayMs", () => {
-		expect(() => validateConfig({ retry: { backoff: { maxDelayMs: -1 } } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { backoff: { maxDelayMs: -1 } } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects partition concurrency < 1", () => {
-		expect(() => validateConfig({ partitions: { api: { concurrency: 0 } } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, partitions: { api: { concurrency: 0 } } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects partition maxRetries < 0", () => {
-		expect(() => validateConfig({ partitions: { api: { retry: { maxRetries: -1 } } } })).toThrow(ConfigurationError);
+		expect(() =>
+			validateConfig({ timeout: { attemptMs: 5_000 }, partitions: { api: { retry: { maxRetries: -1 } } } }),
+		).toThrow(ConfigurationError);
 	});
 
 	it("accepts empty retryOnStatus", () => {
-		expect(() => validateConfig({ retry: { retryOnStatus: [] } })).not.toThrow();
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { retryOnStatus: [] } })).not.toThrow();
 	});
 
 	it("accepts valid retryOnStatus codes", () => {
-		expect(() => validateConfig({ retry: { retryOnStatus: [429, 503] } })).not.toThrow();
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { retryOnStatus: [429, 503] } })).not.toThrow();
 	});
 
 	it("rejects non-error status in retryOnStatus", () => {
-		expect(() => validateConfig({ retry: { retryOnStatus: [200] } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { retryOnStatus: [200] } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects status above 599 in retryOnStatus", () => {
-		expect(() => validateConfig({ retry: { retryOnStatus: [503, 600] } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { retryOnStatus: [503, 600] } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects non-integer status in retryOnStatus", () => {
-		expect(() => validateConfig({ retry: { retryOnStatus: [503.5] } })).toThrow(ConfigurationError);
+		expect(() => validateConfig({ timeout: { attemptMs: 5_000 }, retry: { retryOnStatus: [503.5] } })).toThrow(
+			ConfigurationError,
+		);
 	});
 
 	it("rejects a stream-like body via duck-typing", () => {
