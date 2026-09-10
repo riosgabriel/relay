@@ -1,5 +1,13 @@
 import { HttpClient } from "vereda";
-import { type BenchmarkResult, printResults, runBenchmark, TestServer } from "./utils.js";
+import { checkThresholds, type Thresholds } from "./thresholds.js";
+import {
+	type BenchmarkResult,
+	calculatePercentile,
+	printResults,
+	runBenchmark,
+	saveResults,
+	TestServer,
+} from "./utils.js";
 
 /**
  * Comprehensive benchmark runner
@@ -112,43 +120,58 @@ const benchmarks: Record<string, BenchmarkFn> = {
 			});
 
 			const results = { fast: { success: 0, failed: 0 }, slow: { success: 0, failed: 0 } };
+			const latencies: number[] = [];
+			const errors: Record<string, number> = {};
 			const promises: Promise<void>[] = [];
+
+			const startTime = performance.now();
 
 			for (let i = 0; i < 100; i++) {
 				const isFast = i % 2 === 0;
 				const baseUrl = isFast ? fastServer.baseUrl : slowServer.baseUrl;
 				const target = isFast ? "fast" : "slow";
+				const start = performance.now();
 
 				promises.push(
 					client
 						.get(`${baseUrl}/test/${i}`)
 						.toPromise()
 						.then((result) => {
-							if (result.success) results[target].success++;
-							else results[target].failed++;
+							latencies.push(performance.now() - start);
+							if (result.success) {
+								results[target].success++;
+							} else {
+								results[target].failed++;
+								const errorKey = result.error.constructor.name;
+								errors[errorKey] = (errors[errorKey] ?? 0) + 1;
+							}
 						}),
 				);
 			}
 
 			await Promise.allSettled(promises);
+			const durationMs = performance.now() - startTime;
 
 			const totalSuccess = results.fast.success + results.slow.success;
 			const totalFailed = results.fast.failed + results.slow.failed;
+
+			latencies.sort((a, b) => a - b);
+			const avgLatencyMs = latencies.reduce((sum, val) => sum + val, 0) / latencies.length || 0;
 
 			return {
 				name: "Bulkhead Isolation",
 				totalRequests: 100,
 				successfulRequests: totalSuccess,
 				failedRequests: totalFailed,
-				avgLatencyMs: 0,
-				p50LatencyMs: 0,
-				p95LatencyMs: 0,
-				p99LatencyMs: 0,
-				minLatencyMs: 0,
-				maxLatencyMs: 0,
-				requestsPerSecond: 0,
-				durationMs: 0,
-				errors: {},
+				avgLatencyMs,
+				p50LatencyMs: calculatePercentile(latencies, 50),
+				p95LatencyMs: calculatePercentile(latencies, 95),
+				p99LatencyMs: calculatePercentile(latencies, 99),
+				minLatencyMs: latencies[0] ?? 0,
+				maxLatencyMs: latencies[latencies.length - 1] ?? 0,
+				requestsPerSecond: 100 / (durationMs / 1000),
+				durationMs,
+				errors,
 				timestamp: new Date().toISOString(),
 			};
 		} finally {
@@ -335,6 +358,18 @@ const benchmarks: Record<string, BenchmarkFn> = {
 	},
 };
 
+// Pass/fail gates per benchmark, used to give the suite a non-zero exit code
+// when performance regresses. Benchmarks with intentionally high injected
+// failure rates (Retry Storm, Network Chaos) get looser success-rate floors.
+const benchmarkThresholds: Record<string, Thresholds> = {
+	"Basic Load Test": { minSuccessRate: 0.95, maxP95LatencyMs: 100, maxP99LatencyMs: 200 },
+	"Stress Test (Low Concurrency)": { minSuccessRate: 0.9, maxP95LatencyMs: 250, maxP99LatencyMs: 500 },
+	"Stress Test (High Concurrency)": { minSuccessRate: 0.85, maxP95LatencyMs: 500, maxP99LatencyMs: 1000 },
+	"Network Chaos (30% failures)": { minSuccessRate: 0.9 },
+	"Retry Storm": { minSuccessRate: 0.5 },
+	"Thundering Herd": { minSuccessRate: 0.9, maxP99LatencyMs: 2000 },
+};
+
 async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 	console.log(`\n${"=".repeat(60)}`);
 	console.log("VEREDA BENCHMARK SUITE");
@@ -348,6 +383,7 @@ async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 			: Object.entries(benchmarks);
 
 	const results: BenchmarkResult[] = [];
+	const allViolations: { benchmark: string; metric: string; limit: number; actual: number }[] = [];
 
 	for (const [name, fn] of toRun) {
 		console.log(`\n▶ Running: ${name}`);
@@ -355,6 +391,18 @@ async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 			const result = await fn();
 			results.push(result);
 			printResults(result);
+
+			const thresholds = benchmarkThresholds[name];
+			if (thresholds) {
+				const violations = checkThresholds(result, thresholds);
+				if (violations.length > 0) {
+					console.error(`✗ Threshold violations for ${name}:`);
+					for (const v of violations) {
+						console.error(`  ${v.metric}: limit ${v.limit}, got ${v.actual.toFixed(2)}`);
+						allViolations.push({ benchmark: name, ...v });
+					}
+				}
+			}
 		} catch (error) {
 			console.error(`✗ Failed: ${name}`);
 			console.error(error);
@@ -363,6 +411,14 @@ async function runAllBenchmarks(selectedBenchmarks?: string[]) {
 
 	// Generate summary
 	generateSummary(results);
+
+	const resultsFile = await saveResults(results);
+	console.log(`Results saved to: ${resultsFile}`);
+
+	if (allViolations.length > 0) {
+		console.error(`\n${allViolations.length} threshold violation(s) detected across ${toRun.length} benchmark(s).`);
+		process.exit(1);
+	}
 }
 
 function generateSummary(results: BenchmarkResult[]): void {
