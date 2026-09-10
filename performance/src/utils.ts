@@ -181,6 +181,20 @@ export async function runBenchmark(client: HttpClient, options: BenchmarkOptions
 	};
 }
 
+/**
+ * Persists a full run's results to a timestamped JSON file so runs can be
+ * compared over time instead of only ever existing as console output.
+ */
+export async function saveResults(results: BenchmarkResult[], dir = "results"): Promise<string> {
+	const fs = await import("node:fs/promises");
+	const path = await import("node:path");
+
+	await fs.mkdir(dir, { recursive: true });
+	const filename = path.join(dir, `run-${Date.now()}.json`);
+	await fs.writeFile(filename, JSON.stringify(results, null, 2));
+	return filename;
+}
+
 export function printResults(result: BenchmarkResult): void {
 	console.log(`\n${"=".repeat(60)}`);
 	console.log(`BENCHMARK: ${result.name}`);

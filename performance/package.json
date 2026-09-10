@@ -14,8 +14,7 @@
 		"scenario:bulkhead": "tsx scenarios/bulkhead-scenario.ts",
 		"scenario:retry-storm": "tsx scenarios/retry-storm.ts",
 		"scenario:thundering-herd": "tsx scenarios/thundering-herd.ts",
-		"all": "tsx src/runner.ts",
-		"report": "tsx src/report.ts"
+		"all": "tsx src/runner.ts"
 	},
 	"keywords": [
 		"benchmark",
