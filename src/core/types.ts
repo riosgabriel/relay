@@ -20,11 +20,11 @@ export type ParseFn<T> = (data: unknown) => T;
 export type BackoffFn = (attempt: number) => number;
 
 export interface BackoffOptions {
-	/** Base delay in ms. Default: 200 */
+	/** Base delay in ms. @default {@link DEFAULT_BASE_DELAY_MS} */
 	baseDelayMs?: number;
-	/** Maximum delay cap in ms. Default: 30_000 */
+	/** Maximum delay cap in ms. @default {@link DEFAULT_MAX_DELAY_MS} */
 	maxDelayMs?: number;
-	/** Whether to add jitter. Default: true */
+	/** Whether to add jitter. @default {@link DEFAULT_JITTER} */
 	jitter?: boolean;
 }
 
@@ -33,13 +33,32 @@ export interface BackoffOptions {
 // ---------------------------------------------------------------------------
 
 export interface TimeoutConfig {
-	/** Per-attempt timeout in ms.
-	 *  @default undefined — no per-attempt timeout */
+	/** Per-attempt timeout in ms. Omit to inherit the client-level default;
+	 *  `Infinity` explicitly means no per-attempt cap. */
 	attemptMs?: number;
 	/** Whole-ticket deadline in ms. Starts at request(); cancels the ticket
-	 *  and resolves with DeadlineExceededError on expiry.
-	 *  @default undefined — no total deadline */
+	 *  and resolves with DeadlineExceededError on expiry. Omit (or pass
+	 *  `Infinity`) for no total deadline. */
 	totalMs?: number;
+}
+
+/** `ClientConfig.timeout` variant where `attemptMs` is mandatory. Every
+ *  client must explicitly decide its per-attempt timeout — `Infinity` is a
+ *  legal, deliberate choice to opt out of a cap. This is the one default in
+ *  the library that cannot safely be implicit: every other default (retries,
+ *  concurrency, queue sizes) fails safe when omitted; an omitted timeout
+ *  fails unbounded. Partition- and request-level `timeout` stay optional —
+ *  they inherit this client-level decision unless they override it. */
+export interface ClientTimeoutConfig extends Omit<TimeoutConfig, "attemptMs"> {
+	attemptMs: number;
+}
+
+/** True when `ms` is a real, finite bound — not omitted and not `Infinity`
+ *  (the explicit "no cap" value). Use instead of `!== undefined` wherever a
+ *  timeout/deadline value is checked, since `Infinity` must be treated the
+ *  same as "not set" everywhere a timer would otherwise be created. */
+export function isBoundedMs(ms: number | undefined): ms is number {
+	return ms !== undefined && Number.isFinite(ms);
 }
 
 // ---------------------------------------------------------------------------
@@ -52,12 +71,17 @@ export const DEFAULT_RETRY_ON_STATUS: number[] = [408, 425, 429, 500, 502, 503, 
 // Partition / bulkhead config
 // ---------------------------------------------------------------------------
 
+/** Default per-partition concurrency limit (decision D1). */
+export const DEFAULT_CONCURRENCY = 5;
+/** Default max queued items per partition before rejecting new ones. */
+export const DEFAULT_MAX_QUEUE_SIZE = 100;
+
 export interface PartitionConfig {
 	/** Max concurrent in-flight retries for this partition.
-	 *  @default 5 */
+	 *  @default {@link DEFAULT_CONCURRENCY} */
 	concurrency?: number;
 	/** Max number of pending items in the queue before rejecting new ones.
-	 *  @default 100 */
+	 *  @default {@link DEFAULT_MAX_QUEUE_SIZE} */
 	maxQueueSize?: number;
 	/** When true, the first attempt also goes through the bulkhead (R6).
 	 *  @default false */
@@ -71,10 +95,18 @@ export interface PartitionConfig {
 // Circuit breaker config
 // ---------------------------------------------------------------------------
 
+/** Default consecutive-failure count that trips the circuit open. */
+export const DEFAULT_FAILURE_THRESHOLD = 5;
+/** Default ms to stay open before allowing a half-open trial. */
+export const DEFAULT_RESET_TIMEOUT_MS = 30_000;
+/** Default number of concurrent trial requests allowed while half-open. */
+export const DEFAULT_HALF_OPEN_MAX_ATTEMPTS = 1;
+
 export interface CircuitBreakerConfig {
 	/** @default false */
 	enabled?: boolean;
-	/** Consecutive-failure trip mode (default strategy). @default 5 */
+	/** Consecutive-failure trip mode (default strategy).
+	 *  @default {@link DEFAULT_FAILURE_THRESHOLD} */
 	failureThreshold?: number;
 	/** Rolling-window trip mode. If set, used INSTEAD of failureThreshold. */
 	window?: {
@@ -82,9 +114,11 @@ export interface CircuitBreakerConfig {
 		failureRatePercent: number;
 		minimumRequests: number;
 	};
-	/** ms to stay open before allowing a half-open trial. @default 30_000 */
+	/** ms to stay open before allowing a half-open trial.
+	 *  @default {@link DEFAULT_RESET_TIMEOUT_MS} */
 	resetTimeoutMs?: number;
-	/** concurrent trial requests allowed while half-open. @default 1 */
+	/** concurrent trial requests allowed while half-open.
+	 *  @default {@link DEFAULT_HALF_OPEN_MAX_ATTEMPTS} */
 	halfOpenMaxAttempts?: number;
 	/** Override default failure classification (network/timeout/retryable_status). */
 	isFailure?: (error: AppError) => boolean;
@@ -94,15 +128,18 @@ export interface CircuitBreakerConfig {
 // Retry config
 // ---------------------------------------------------------------------------
 
+/** Default number of retries after the first attempt. */
+export const DEFAULT_MAX_RETRIES = 3;
+
 export interface RetryConfig {
 	/** Retries after the first attempt. `MaxRetriesExceededError.attempts` is
 	 *  total executions, i.e. `maxRetries + 1`.
-	 *  @default 3 */
+	 *  @default {@link DEFAULT_MAX_RETRIES} */
 	maxRetries?: number;
 	/** @default `{ baseDelayMs: 200, maxDelayMs: 30_000, jitter: true }` */
 	backoff?: BackoffFn | BackoffOptions;
 	/** HTTP status codes that trigger retry (e.g. 408, 429, 500, 502, 503, 504).
-	 *  Default: [408, 425, 429, 500, 502, 503, 504] */
+	 *  @default {@link DEFAULT_RETRY_ON_STATUS} */
 	retryOnStatus?: number[];
 	/** Allows retrying non-idempotent methods (POST/PATCH/CONNECT). An
 	 *  `Idempotency-Key` header also enables retries. Default: false. */
@@ -197,16 +234,28 @@ export interface RequestOptions<T = unknown> {
 // Client config
 // ---------------------------------------------------------------------------
 
+/** Default global concurrency cap across all partitions (decision D1). */
+export const DEFAULT_GLOBAL_CONCURRENCY = 50;
+/** Default max requests queued globally, across all partitions, waiting for
+ *  a concurrency permit before new requests are rejected with QueueFullError. */
+export const DEFAULT_GLOBAL_QUEUE_SIZE = 100;
+
 export interface ClientConfig {
 	/** Base URL prepended to all requests */
 	baseUrl?: string;
 	/** Default retry config */
 	retry?: RetryConfig;
-	/** Default timeout config */
-	timeout?: TimeoutConfig;
+	/** Default timeout config. `attemptMs` is required — pass `Infinity` to
+	 *  explicitly opt out of a per-attempt cap, so "no timeout" is always a
+	 *  deliberate choice rather than an accidental default. */
+	timeout: ClientTimeoutConfig;
 	/** Global concurrency across all partitions.
-	 *  @default 50 */
+	 *  @default {@link DEFAULT_GLOBAL_CONCURRENCY} */
 	concurrency?: number;
+	/** Max requests queued globally (across all partitions) waiting for a
+	 *  concurrency permit before new requests are rejected with QueueFullError.
+	 *  @default {@link DEFAULT_GLOBAL_QUEUE_SIZE} */
+	maxQueueSize?: number;
 	/** Per-partition overrides. Partitions not listed here use
 	 *  `{ concurrency: 5, maxQueueSize: 100 }`.
 	 *  @default {} */

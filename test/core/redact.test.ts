@@ -73,7 +73,7 @@ describe("Log redaction (6.3)", () => {
 	});
 
 	it("redacts query parameters in lifecycle events by default", async () => {
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const events: { url: string }[] = [];
 
 		client.on("success", (data) => {
@@ -102,7 +102,7 @@ describe("Log redaction (6.3)", () => {
 			error: (_message: string, _data: Record<string, unknown>) => {},
 		};
 
-		const client = HttpClient.create({ logger });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, logger });
 
 		await client.get(`${server.url}/ok?token=secret123`).toPromise();
 
@@ -118,7 +118,7 @@ describe("Log redaction (6.3)", () => {
 	});
 
 	it("preserves raw URLs in events when redactQuery is false", async () => {
-		const client = HttpClient.create({ redactQuery: false });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, redactQuery: false });
 		const events: { url: string }[] = [];
 
 		client.on("success", (data) => {
@@ -146,7 +146,7 @@ describe("Log redaction (6.3)", () => {
 			error: (_message: string, _data: Record<string, unknown>) => {},
 		};
 
-		const client = HttpClient.create({ logger, redactQuery: false });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, logger, redactQuery: false });
 
 		await client.get(`${server.url}/ok?token=secret123`).toPromise();
 
@@ -159,6 +159,7 @@ describe("Log redaction (6.3)", () => {
 
 	it("redacts URLs in failure events on retry exhaustion", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 1,
 				retryOnStatus: [503],

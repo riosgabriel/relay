@@ -76,7 +76,7 @@ describe("replayable bodies", () => {
 			}
 		});
 
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.post(`${server.url}/replay`, () => makeStream(payload), {
 				retry: { ...fastRetry, idempotent: true },
@@ -98,7 +98,7 @@ describe("replayable bodies", () => {
 			res.end("{}");
 		});
 
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		// `!`: the expect() callback runs synchronously, so this is assigned before use.
 		let ticket!: ReturnType<HttpClient["post"]>;
 		expect(() => {
@@ -122,7 +122,7 @@ describe("replayable bodies", () => {
 			res.end(JSON.stringify({ ok: true }));
 		});
 
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.post(
 				`${server.url}/throw`,
@@ -157,7 +157,7 @@ describe("replayable bodies", () => {
 			}
 		});
 
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client
 			.post(`${server.url}/string`, () => "hello", {
 				retry: { ...fastRetry, idempotent: true },

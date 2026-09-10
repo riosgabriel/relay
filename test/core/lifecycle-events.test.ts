@@ -57,7 +57,7 @@ describe("Lifecycle events (6.1)", () => {
 	// -----------------------------------------------------------------------
 
 	it("request event includes partition", async () => {
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const events = collectEvents(client);
 
 		server.setHandler((_req, res) => {
@@ -83,6 +83,7 @@ describe("Lifecycle events (6.1)", () => {
 
 	it("success event has correct shape: attempts, durationMs, queuedMs, statusCode", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
 		const events = collectEvents(client);
@@ -117,6 +118,7 @@ describe("Lifecycle events (6.1)", () => {
 
 	it("failure event has correct shape: attempts, durationMs, queuedMs, error", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 0,
 				backoff: { baseDelayMs: 10, jitter: false },
@@ -153,6 +155,7 @@ describe("Lifecycle events (6.1)", () => {
 
 	it("cancelled event has correct shape: attempts, durationMs", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: { backoff: { baseDelayMs: 1000, jitter: false } },
 		});
 		const events = collectEvents(client);
@@ -185,7 +188,7 @@ describe("Lifecycle events (6.1)", () => {
 	// -----------------------------------------------------------------------
 
 	it("emits exactly one terminal event (success) per ticket", async () => {
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const events = collectEvents(client);
 
 		server.setHandler((_req, res) => {
@@ -209,6 +212,7 @@ describe("Lifecycle events (6.1)", () => {
 
 	it("emits exactly one terminal event (failure) per ticket", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 0,
 				backoff: { baseDelayMs: 10, jitter: false },
@@ -238,6 +242,7 @@ describe("Lifecycle events (6.1)", () => {
 	it("success after retry has attempts > 1 and statusCode", async () => {
 		let hits = 0;
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 3,
 				retryOnStatus: [503],
@@ -280,6 +285,7 @@ describe("Lifecycle events (6.1)", () => {
 
 	it("failure after exhausted retries has correct attempts count", async () => {
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			retry: {
 				maxRetries: 2,
 				retryOnStatus: [503],

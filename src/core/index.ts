@@ -6,6 +6,7 @@ export type {
 	TicketUpdate,
 } from "../ticket/ticket.js";
 export { createTicket, Ticket } from "../ticket/ticket.js";
+export { DEFAULT_BASE_DELAY_MS, DEFAULT_JITTER, DEFAULT_MAX_DELAY_MS } from "./backoff.js";
 export { HttpClient, json } from "./client.js";
 export type { AppError } from "./errors.js";
 export {
@@ -16,6 +17,7 @@ export {
 	HttpError,
 	MaxRetriesExceededError,
 	NetworkError,
+	NO_TIMEOUT_CONFIGURED,
 	QueueFullError,
 	RequestError,
 	RetryableStatusError,
@@ -29,6 +31,7 @@ export type {
 	BackoffOptions,
 	CircuitBreakerConfig,
 	ClientConfig,
+	ClientTimeoutConfig,
 	CloseOptions,
 	LifecycleEventMap,
 	Logger,
@@ -39,5 +42,16 @@ export type {
 	RetryConfig,
 	TimeoutConfig,
 } from "./types.js";
-export { DEFAULT_RETRY_ON_STATUS } from "./types.js";
+export {
+	DEFAULT_CONCURRENCY,
+	DEFAULT_FAILURE_THRESHOLD,
+	DEFAULT_GLOBAL_CONCURRENCY,
+	DEFAULT_GLOBAL_QUEUE_SIZE,
+	DEFAULT_HALF_OPEN_MAX_ATTEMPTS,
+	DEFAULT_MAX_QUEUE_SIZE,
+	DEFAULT_MAX_RETRIES,
+	DEFAULT_RESET_TIMEOUT_MS,
+	DEFAULT_RETRY_ON_STATUS,
+	isBoundedMs,
+} from "./types.js";
 export { validateConfig } from "./validate.js";

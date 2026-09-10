@@ -91,6 +91,7 @@ async function main() {
 
 	const client = HttpClient.create({
 		baseUrl: "https://httpbin.org",
+		timeout: { attemptMs: 5_000 },
 		metrics: sink,
 		retry: { maxRetries: 1 },
 	});

@@ -1,5 +1,12 @@
 import type { AppError } from "../core/errors.js";
-import type { CircuitBreakerConfig, PartitionConfig } from "../core/types.js";
+import {
+	type CircuitBreakerConfig,
+	DEFAULT_FAILURE_THRESHOLD,
+	DEFAULT_HALF_OPEN_MAX_ATTEMPTS,
+	DEFAULT_RESET_TIMEOUT_MS,
+	type PartitionConfig,
+} from "../core/types.js";
+import { DEFAULT_PARTITION_TTL_MS } from "./bulkhead.js";
 import { RETRIABLE_KINDS } from "./policy.js";
 
 type CircuitState = "closed" | "open" | "half-open";
@@ -79,7 +86,6 @@ export class CircuitBreaker {
 	private readonly onStateChange?: (partition: string, state: "open" | "closed") => void;
 
 	private state: CircuitState = "closed";
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: read inside evaluateTripCondition(), currently a TODO(human) stub.
 	private consecutiveFailures = 0;
 	private openedAt = 0;
 	private halfOpenInFlight = 0;
@@ -106,7 +112,7 @@ export class CircuitBreaker {
 		if (!this.config.enabled) return true;
 
 		if (this.state === "open") {
-			const resetTimeoutMs = this.config.resetTimeoutMs ?? 30_000;
+			const resetTimeoutMs = this.config.resetTimeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
 			if (Date.now() - this.openedAt >= resetTimeoutMs) {
 				this.state = "half-open";
 				this.halfOpenInFlight = 0;
@@ -116,7 +122,7 @@ export class CircuitBreaker {
 		}
 
 		if (this.state === "half-open") {
-			const maxAttempts = this.config.halfOpenMaxAttempts ?? 1;
+			const maxAttempts = this.config.halfOpenMaxAttempts ?? DEFAULT_HALF_OPEN_MAX_ATTEMPTS;
 			if (this.halfOpenInFlight >= maxAttempts) {
 				return false;
 			}
@@ -190,14 +196,20 @@ export class CircuitBreaker {
 	 *   `this.window.totalRequests() >= this.config.window.minimumRequests` AND
 	 *   `this.window.failureRate() > this.config.window.failureRatePercent`.
 	 * - Otherwise, use consecutive-failure counting: trip when
-	 *   `this.consecutiveFailures >= (this.config.failureThreshold ?? 5)`.
+	 *   `this.consecutiveFailures >= (this.config.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD)`.
 	 *
 	 * Return true to trip to "open" (the caller in recordFailure() handles the
 	 * actual state transition and event emission); false to stay "closed".
 	 */
 	private evaluateTripCondition(): boolean {
-		// TODO(human): implement the trip decision described above.
-		return false;
+		const windowConfig = this.config.window;
+		if (this.window && windowConfig) {
+			return (
+				this.window.totalRequests() >= windowConfig.minimumRequests &&
+				this.window.failureRate() > windowConfig.failureRatePercent
+			);
+		}
+		return this.consecutiveFailures >= (this.config.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD);
 	}
 }
 
@@ -219,7 +231,7 @@ export class CircuitBreakerRegistry {
 	constructor(
 		globalConfig: CircuitBreakerConfig = {},
 		partitionConfigs: Record<string, PartitionConfig> = {},
-		ttlMs: number = 60_000,
+		ttlMs: number = DEFAULT_PARTITION_TTL_MS,
 		onStateChange?: (partition: string, state: "open" | "closed") => void,
 	) {
 		this.ttlMs = ttlMs;

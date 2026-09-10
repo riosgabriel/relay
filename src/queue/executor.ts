@@ -1,7 +1,7 @@
 import type { AppError } from "../core/errors.js";
 import { ConfigurationError, HttpError, NetworkError, RetryableStatusError, ValidationError } from "../core/errors.js";
 import type { RequestOptions, Result, RetryConfig, TimeoutConfig } from "../core/types.js";
-import { DEFAULT_RETRY_ON_STATUS } from "../core/types.js";
+import { DEFAULT_RETRY_ON_STATUS, isBoundedMs } from "../core/types.js";
 import { isReadableStream } from "../core/validate.js";
 
 export interface ExecuteRequest {
@@ -66,11 +66,16 @@ export async function executeRequest(req: ExecuteRequest, middleware: Middleware
 	// listener, which undici only removes asynchronously after completion.
 	const sources: AbortSignal[] = [signal];
 	if (options.signal) sources.push(options.signal);
-	const timeoutController = timeoutMs === undefined ? undefined : new AbortController();
+	// `Infinity` is a legal, explicit "no cap" value (see isBoundedMs) — it must
+	// be treated the same as "not set" here. Node clamps any setTimeout delay
+	// over ~24.8 days to 1ms, so passing Infinity straight to setTimeout would
+	// fire the timer almost immediately instead of never.
+	const hasAttemptTimeout = isBoundedMs(timeoutMs);
+	const timeoutController = hasAttemptTimeout ? new AbortController() : undefined;
 	if (timeoutController) sources.push(timeoutController.signal);
 	const attemptSignal = AbortSignal.any(sources);
 	const timeoutId =
-		timeoutController && timeoutMs !== undefined ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
+		timeoutController && hasAttemptTimeout ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
 
 	// A fresh Headers instance per attempt: middleware (e.g. defaultHeaders)
 	// mutates ctx.headers in place, and that must never leak into the next

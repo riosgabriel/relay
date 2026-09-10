@@ -31,6 +31,7 @@ describe("Partition retry/timeout override (5.6)", () => {
 
 		try {
 			const client = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 3,
 					retryOnStatus: [503],
@@ -63,6 +64,7 @@ describe("Partition retry/timeout override (5.6)", () => {
 
 		try {
 			const client = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 3,
 					retryOnStatus: [503],
@@ -95,6 +97,7 @@ describe("Partition retry/timeout override (5.6)", () => {
 
 		try {
 			const client = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 3,
 					retryOnStatus: [503],

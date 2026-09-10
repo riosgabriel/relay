@@ -51,6 +51,7 @@ describe("Retry-After honors (fake timers)", () => {
 			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
@@ -80,6 +81,7 @@ describe("Retry-After honors (fake timers)", () => {
 			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, maxDelayMs: 500, jitter: false } },
 		});
@@ -116,6 +118,7 @@ describe("Retry-After honors (fake timers)", () => {
 			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});
@@ -141,6 +144,7 @@ describe("Retry-After honors (fake timers)", () => {
 			.mockResolvedValueOnce(okResponse());
 
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			fetch: fetchMock as unknown as typeof globalThis.fetch,
 			retry: { backoff: { baseDelayMs: 10, jitter: false } },
 		});

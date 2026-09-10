@@ -44,3 +44,7 @@ Desktop.ini
 # Local planning docs
 PLAN.md
 TRACKER.md
+
+# Agent worktrees (each has its own biome.json, which trips up a repo-root
+# biome scan if not excluded)
+.claude/worktrees/

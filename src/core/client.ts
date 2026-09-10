@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { BulkheadRegistry, type BulkheadSnapshot } from "../queue/bulkhead.js";
+import { BulkheadRegistry, type BulkheadSnapshot, DEFAULT_PARTITION_TTL_MS } from "../queue/bulkhead.js";
 import { type CircuitBreaker, CircuitBreakerRegistry } from "../queue/circuit-breaker.js";
 import { executeRequest, type MiddlewareFn } from "../queue/executor.js";
 import { type RetryPolicyContext, shouldRetry } from "../queue/policy.js";
@@ -13,6 +13,7 @@ import {
 	ConfigurationError,
 	DeadlineExceededError,
 	NetworkError,
+	NO_TIMEOUT_CONFIGURED,
 	QueueFullError,
 	TimeoutError,
 } from "./errors.js";
@@ -30,6 +31,7 @@ import type {
 	RetryConfig,
 	TimeoutConfig,
 } from "./types.js";
+import { DEFAULT_GLOBAL_CONCURRENCY, DEFAULT_GLOBAL_QUEUE_SIZE, DEFAULT_MAX_RETRIES, isBoundedMs } from "./types.js";
 import { validateConfig, validateRequestBody } from "./validate.js";
 
 /** Pairs an in-flight ticket with its cleanup function so that
@@ -61,12 +63,15 @@ export class HttpClient {
 		this.redactQuery = config.redactQuery !== false;
 		this.customFetch = config.fetch;
 		this.partitionConfigs = config.partitions ?? {};
-		const semaphore = new Semaphore(config.concurrency ?? 50);
-		this.bulkheads = new BulkheadRegistry({}, this.partitionConfigs, 60_000, semaphore);
+		const semaphore = new Semaphore(
+			config.concurrency ?? DEFAULT_GLOBAL_CONCURRENCY,
+			config.maxQueueSize ?? DEFAULT_GLOBAL_QUEUE_SIZE,
+		);
+		this.bulkheads = new BulkheadRegistry({}, this.partitionConfigs, DEFAULT_PARTITION_TTL_MS, semaphore);
 		this.circuitBreakers = new CircuitBreakerRegistry(
 			config.circuitBreaker ?? {},
 			this.partitionConfigs,
-			60_000,
+			DEFAULT_PARTITION_TTL_MS,
 			(partition, state) => {
 				if (state === "open") {
 					this.emit("circuitOpen", { partition });
@@ -77,7 +82,7 @@ export class HttpClient {
 		);
 	}
 
-	static create(config: ClientConfig = {}): HttpClient {
+	static create(config: ClientConfig): HttpClient {
 		validateConfig(config);
 		return new HttpClient(config);
 	}
@@ -152,7 +157,7 @@ export class HttpClient {
 				deadlineTimer = undefined;
 			}
 		};
-		if (timeoutConfig.totalMs !== undefined) {
+		if (isBoundedMs(timeoutConfig.totalMs)) {
 			deadlineTimer = setTimeout(() => {
 				controller.abortSignal();
 			}, timeoutConfig.totalMs);
@@ -349,7 +354,7 @@ export class HttpClient {
 					attempts: 1,
 					durationMs,
 				});
-				if (!ticket.isCancelled && timeoutConfig.totalMs !== undefined) {
+				if (!ticket.isCancelled && isBoundedMs(timeoutConfig.totalMs)) {
 					controller.markDone({
 						success: false,
 						error: new DeadlineExceededError(url, timeoutConfig.totalMs),
@@ -377,7 +382,7 @@ export class HttpClient {
 				// maxRetries=0: no retries configured, surface the raw error immediately
 				// without entering the bulkhead (which would waste a slot for no work).
 				{
-					const effectiveMaxRetries = retryConfig.maxRetries ?? 3;
+					const effectiveMaxRetries = retryConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
 					if (effectiveMaxRetries === 0) {
 						const durationMs = Date.now() - startTime;
 						this.emit("failure", {
@@ -415,7 +420,7 @@ export class HttpClient {
 				return;
 
 			case "timeout": {
-				const error = new TimeoutError(url, timeoutConfig.attemptMs ?? 0);
+				const error = new TimeoutError(url, timeoutConfig.attemptMs ?? NO_TIMEOUT_CONFIGURED);
 				// Record the raw attempt outcome against the circuit breaker
 				// regardless of what the retry policy decides to do with it.
 				breaker.recordFailure(error);
@@ -425,7 +430,7 @@ export class HttpClient {
 				}
 				// maxRetries=0: surface timeout immediately without entering the bulkhead
 				{
-					const effectiveMaxRetries = retryConfig.maxRetries ?? 3;
+					const effectiveMaxRetries = retryConfig.maxRetries ?? DEFAULT_MAX_RETRIES;
 					if (effectiveMaxRetries === 0) {
 						const durationMs = Date.now() - startTime;
 						this.emit("failure", {

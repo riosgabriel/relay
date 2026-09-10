@@ -33,6 +33,56 @@ describe("CircuitBreaker", () => {
 		expect(cb.canRequest()).toBe(false);
 	});
 
+	// NOTE: like the consecutive-failure test above, these exercise the
+	// window-mode branch of evaluateTripCondition() and are expected to FAIL
+	// (or, for the "stays closed" case, pass trivially) until it's implemented.
+	describe("rolling-window mode", () => {
+		it("does not trip before minimumRequests is reached, even at 100% failure rate", () => {
+			const cb = new CircuitBreaker("test", {
+				enabled: true,
+				window: { sizeMs: 10_000, failureRatePercent: 50, minimumRequests: 4 },
+			});
+
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordFailure(new NetworkError("boom"));
+			// Only 3 requests recorded — below minimumRequests (4) — must stay closed
+			// regardless of failure rate.
+			expect(cb.canRequest()).toBe(true);
+		});
+
+		it("trips once minimumRequests is reached and failureRatePercent is exceeded", () => {
+			const cb = new CircuitBreaker("test", {
+				enabled: true,
+				window: { sizeMs: 10_000, failureRatePercent: 50, minimumRequests: 4 },
+			});
+
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordFailure(new NetworkError("boom"));
+			expect(cb.canRequest()).toBe(true);
+
+			// 4th request crosses minimumRequests with a 100% failure rate (> 50%).
+			cb.recordFailure(new NetworkError("boom"));
+			expect(cb.canRequest()).toBe(false);
+		});
+
+		it("stays closed when the failure rate is at, not above, failureRatePercent", () => {
+			const cb = new CircuitBreaker("test", {
+				enabled: true,
+				window: { sizeMs: 10_000, failureRatePercent: 50, minimumRequests: 4 },
+			});
+
+			// 4 requests, 2 failures = exactly 50% — the trip condition requires
+			// strictly greater than failureRatePercent, so this must stay closed.
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordSuccess();
+			cb.recordFailure(new NetworkError("boom"));
+			cb.recordSuccess();
+			expect(cb.canRequest()).toBe(true);
+		});
+	});
+
 	it("rejects immediately via canRequest() once open", () => {
 		const onStateChange = vi.fn();
 		const cb = new CircuitBreaker("test", { enabled: true, failureThreshold: 1 }, onStateChange);

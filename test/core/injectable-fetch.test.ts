@@ -15,7 +15,7 @@ describe("Injectable fetch (6.4)", () => {
 			});
 		};
 
-		const client = HttpClient.create({ fetch: customFetch });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, fetch: customFetch });
 
 		const result = await client
 			.get<{ custom: boolean }>("https://example.com/api/test", {
@@ -44,7 +44,7 @@ describe("Injectable fetch (6.4)", () => {
 			});
 		};
 
-		const client = HttpClient.create({ fetch: customFetch });
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 }, fetch: customFetch });
 
 		await client
 			.post("https://example.com/api/data", JSON.stringify({ key: "value" }), {
@@ -74,6 +74,7 @@ describe("Injectable fetch (6.4)", () => {
 		};
 
 		const client = HttpClient.create({
+			timeout: { attemptMs: 5_000 },
 			fetch: customFetch,
 			retry: {
 				maxRetries: 3,
@@ -99,7 +100,7 @@ describe("Injectable fetch (6.4)", () => {
 		await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
 		const addr = server.address() as { port: number };
 
-		const client = HttpClient.create();
+		const client = HttpClient.create({ timeout: { attemptMs: 5_000 } });
 		const result = await client.get(`http://127.0.0.1:${addr.port}/ok`).toPromise();
 
 		expect(result.success).toBe(true);

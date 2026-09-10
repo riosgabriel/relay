@@ -36,6 +36,7 @@ describe("Partition snapshots (5.4)", () => {
 		try {
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				concurrency: 10,
 				retry: {
 					maxRetries: 1,
@@ -81,6 +82,7 @@ describe("Partition snapshots (5.4)", () => {
 		try {
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				retry: { maxRetries: 0 },
 				partitions: {
 					[host]: { concurrency: 3, maxQueueSize: 5 },
@@ -115,6 +117,7 @@ describe("Circuit breaker integration", () => {
 		try {
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				retry: { maxRetries: 0, retryOnStatus: [503] },
 			});
 
@@ -135,10 +138,6 @@ describe("Circuit breaker integration", () => {
 		}
 	});
 
-	// NOTE: this test depends on evaluateTripCondition() (src/queue/circuit-breaker.ts),
-	// currently a TODO(human) stub that always returns false. Until it's implemented,
-	// the breaker never trips to "open", so the second request below reaches the
-	// server instead of being short-circuited — this test is EXPECTED TO FAIL.
 	it("opens the circuit after consecutive failures and short-circuits with CircuitOpenError", async () => {
 		let requestCount = 0;
 
@@ -151,6 +150,7 @@ describe("Circuit breaker integration", () => {
 		try {
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				retry: { maxRetries: 0, retryOnStatus: [503] },
 				partitions: {
 					[host]: { circuitBreaker: { enabled: true, failureThreshold: 1 } },

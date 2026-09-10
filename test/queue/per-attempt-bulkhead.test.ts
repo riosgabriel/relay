@@ -35,6 +35,7 @@ describe("Per-attempt bulkhead scheduling (5.1)", () => {
 
 		try {
 			const client = HttpClient.create({
+				timeout: { attemptMs: 5_000 },
 				retry: {
 					maxRetries: 2,
 					backoff: { baseDelayMs: 300, maxDelayMs: 300, jitter: false },

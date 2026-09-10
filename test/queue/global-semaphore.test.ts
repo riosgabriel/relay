@@ -45,6 +45,7 @@ describe("Global semaphore (5.2)", () => {
 
 			const client = HttpClient.create({
 				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
 				concurrency: 2, // Global semaphore: max 2 across all partitions
 				retry: {
 					maxRetries: 0, // No retries — just fire once

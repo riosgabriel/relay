@@ -1,8 +1,13 @@
 import { QueueFullError } from "../core/errors.js";
-import type { PartitionConfig } from "../core/types.js";
+import { DEFAULT_CONCURRENCY, DEFAULT_MAX_QUEUE_SIZE, type PartitionConfig } from "../core/types.js";
 import type { Semaphore } from "./semaphore.js";
 
 type Task = () => Promise<void>;
+
+/** Default TTL (ms) before an idle partition registry entry (bulkhead or
+ *  circuit breaker) is swept from its registry. Shared by both registries
+ *  so the eviction policy stays in one place. */
+export const DEFAULT_PARTITION_TTL_MS = 60_000;
 
 export class Bulkhead {
 	public readonly name: string;
@@ -15,8 +20,8 @@ export class Bulkhead {
 
 	constructor(name: string, config: PartitionConfig = {}) {
 		this.name = name;
-		this.concurrency = config.concurrency ?? 5;
-		this.maxQueueSize = config.maxQueueSize ?? 100;
+		this.concurrency = config.concurrency ?? DEFAULT_CONCURRENCY;
+		this.maxQueueSize = config.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
 		this._limitFirstAttempts = config.limitFirstAttempts ?? false;
 	}
 
@@ -156,7 +161,7 @@ export class BulkheadRegistry {
 	constructor(
 		globalConfig: PartitionConfig = {},
 		partitionConfigs: Record<string, PartitionConfig> = {},
-		ttlMs: number = 60_000,
+		ttlMs: number = DEFAULT_PARTITION_TTL_MS,
 		semaphore?: Semaphore,
 	) {
 		this.ttlMs = ttlMs;
