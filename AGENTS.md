@@ -39,6 +39,7 @@ logger in `src/middleware/index.ts`. Both sites carry `biome-ignore` comments ex
 - **`bun.lock` is the only lockfile.** Install with `bun install`; CI uses `bun install --frozen-lockfile`. Do not run `npm install` — it ignores `bun.lock` and writes a `package-lock.json` (now gitignored). There is no `prepare` script — installing does not build `dist/` or set up git hooks; run `npm run build` and `npx husky` yourself (see CONTRIBUTING.md).
 - **Two test runtimes.** CI runs the suite under Node 20/22/24 *and* under Bun. `bun run --bun test` reproduces the Bun leg — without `--bun`, bun respects the vitest shebang and silently runs under Node. Runtime-conditional expectations (currently only the TRACE row in `test/core/retry-matrix.test.ts`) key off a `Bun` global check; CI sets `EXPECTED_RUNTIME` on both legs so a leg that silently changes runtime fails instead of passing.
 - README prose can drift (e.g. it claims N tests; suite has a different count). Trust code, config, and test output over README claims.
+- **Skills live only under `.claude/skills/`.** OpenCode natively falls back to reading `.claude/skills/<name>/SKILL.md` when no `.opencode/skills/` copy exists, so don't duplicate a skill file into `.opencode/skills/` to make it visible there — that just creates a second copy to keep in sync. One file, one location.
 
 ## Architecture
 
