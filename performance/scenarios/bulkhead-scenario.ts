@@ -23,8 +23,11 @@ async function bulkheadScenario() {
 		console.log(`Slow server: ${slowServer.baseUrl} (100ms + 50% failures)`);
 		console.log("");
 
+		const totalRequests = 200;
+
 		const client = HttpClient.create({
 			concurrency: 10, // Global limit
+			maxQueueSize: totalRequests, // Comfortably exceed the burst so global queueing doesn't mask partition behavior
 			partitions: {
 				[fastServer.baseUrl.replace("http://", "")]: {
 					concurrency: 5,
@@ -39,7 +42,6 @@ async function bulkheadScenario() {
 			timeout: { attemptMs: 2000 },
 		});
 
-		const totalRequests = 200;
 		const results = {
 			fast: { success: 0, failed: 0, latencies: [] as number[] },
 			slow: { success: 0, failed: 0, latencies: [] as number[] },
