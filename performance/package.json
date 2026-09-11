@@ -14,6 +14,7 @@
 		"scenario:bulkhead": "tsx scenarios/bulkhead-scenario.ts",
 		"scenario:retry-storm": "tsx scenarios/retry-storm.ts",
 		"scenario:thundering-herd": "tsx scenarios/thundering-herd.ts",
+		"scenario:circuit-breaker": "tsx scenarios/circuit-breaker-scenario.ts",
 		"all": "tsx src/runner.ts"
 	},
 	"keywords": [
