@@ -112,14 +112,29 @@ async function bulkheadScenario() {
 
 		console.log("\n=== ANALYSIS ===");
 
-		// Check if fast partition was affected by slow partition
-		const expectedFastLatency = 10; // 5ms base + some overhead
-		if (fastStats.avg > expectedFastLatency * 2) {
-			console.warn(`⚠️  WARNING: Fast partition latency (${fastStats.avg.toFixed(0)}ms) higher than expected!`);
-			console.warn("   Bulkhead isolation may not be working correctly.");
+		// Note: first attempts bypass the per-partition bulkhead unless
+		// `limitFirstAttempts` is set (it defaults to false) — see
+		// PartitionConfig.limitFirstAttempts in src/core/types.ts. Neither
+		// partition sets it here, so this scenario currently measures
+		// global-semaphore fairness, not per-partition concurrency isolation,
+		// on the happy path. An absolute latency ceiling was tried here
+		// previously and removed: it compared a per-request service-time
+		// constant against time-since-batch-start over a 100-request queue,
+		// which no concurrency setting can satisfy.
+		if (results.fast.failed > 0) {
+			console.warn(
+				`⚠️  WARNING: Fast partition had ${results.fast.failed} failure(s) — should be 0 (its server has 0% failRate).`,
+			);
+			console.warn("   The slow/failing partition is contaminating the fast partition's outcomes.");
+		} else if (fastStats.avg >= slowStats.avg) {
+			console.warn(
+				`⚠️  WARNING: Fast partition latency (${fastStats.avg.toFixed(0)}ms) is not lower than the slow partition's (${slowStats.avg.toFixed(0)}ms).`,
+			);
 		} else {
-			console.log("✓ Fast partition maintained low latency despite slow/failing partition");
-			console.log("✓ Bulkhead isolation working as expected");
+			console.log("✓ Fast partition had zero failures despite the slow/failing partition");
+			console.log(
+				`✓ Fast partition stayed faster than slow (${fastStats.avg.toFixed(0)}ms vs ${slowStats.avg.toFixed(0)}ms)`,
+			);
 		}
 
 		// Verify queue behavior
