@@ -189,6 +189,26 @@ export class HttpClient {
 			entry.cleanup,
 			startTime,
 		).catch((err: unknown) => {
+			// QueueFullError from the global semaphore acquire (see
+			// _fireFirstAttempt) is an expected, well-typed error — preserve it
+			// as-is instead of demoting it to a generic NetworkError, mirroring
+			// how the retry-loop path below already handles the same error type.
+			if (err instanceof QueueFullError) {
+				const durationMs = Date.now() - startTime;
+				this.emit("failure", {
+					ticketId: ticket.id,
+					url: this.logUrl(url),
+					attempts: 1,
+					durationMs,
+					queuedMs: 0,
+					error: err,
+				});
+				if (ticket.status.state !== "done" && !ticket.isCancelled) {
+					controller.markDone({ success: false, error: err } as never);
+				}
+				entry.cleanup();
+				return;
+			}
 			// Catch any unexpected throws and surface them as ticket failures
 			const error = new NetworkError(err instanceof Error ? err.message : "Unexpected error", {
 				cause: err,
