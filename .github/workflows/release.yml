@@ -132,7 +132,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.mode.outputs.dry_run == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
