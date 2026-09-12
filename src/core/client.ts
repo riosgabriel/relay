@@ -14,7 +14,7 @@ import {
 	DeadlineExceededError,
 	NetworkError,
 	NO_TIMEOUT_CONFIGURED,
-	QueueFullError,
+	RequestError,
 	TimeoutError,
 } from "./errors.js";
 import { METRICS, type MetricsSink } from "./metrics.js";
@@ -189,29 +189,22 @@ export class HttpClient {
 			entry.cleanup,
 			startTime,
 		).catch((err: unknown) => {
-			// QueueFullError from the global semaphore acquire (see
-			// _fireFirstAttempt) is an expected, well-typed error — preserve it
-			// as-is instead of demoting it to a generic NetworkError, mirroring
-			// how the retry-loop path below already handles the same error type.
-			if (err instanceof QueueFullError) {
-				const durationMs = Date.now() - startTime;
-				this.emit("failure", {
-					ticketId: ticket.id,
-					url: this.logUrl(url),
-					attempts: 1,
-					durationMs,
-					queuedMs: 0,
-					error: err,
-				});
-				if (ticket.status.state !== "done" && !ticket.isCancelled) {
-					controller.markDone({ success: false, error: err } as never);
-				}
-				entry.cleanup();
-				return;
-			}
-			// Catch any unexpected throws and surface them as ticket failures
-			const error = new NetworkError(err instanceof Error ? err.message : "Unexpected error", {
-				cause: err,
+			// A pre-typed RequestError (e.g. QueueFullError from the global
+			// semaphore acquire in _fireFirstAttempt) is an expected, well-typed
+			// error — preserve it as-is instead of demoting it to a generic
+			// NetworkError. Anything else is a genuinely unexpected throw.
+			const error =
+				err instanceof RequestError
+					? err
+					: new NetworkError(err instanceof Error ? err.message : "Unexpected error", { cause: err });
+			const durationMs = Date.now() - startTime;
+			this.emit("failure", {
+				ticketId: ticket.id,
+				url: this.logUrl(url),
+				attempts: 1,
+				durationMs,
+				queuedMs: 0,
+				error,
 			});
 			if (ticket.status.state !== "done" && !ticket.isCancelled) {
 				controller.markDone({ success: false, error } as never);
@@ -607,25 +600,15 @@ export class HttpClient {
 			},
 			onCleanup: cleanup,
 		}).catch((err: unknown) => {
-			// QueueFullError is already handled inside runRetryLoop (marks done +
-			// re-throws). The client catches it here for emission and cleanup.
-			if (err instanceof QueueFullError) {
-				const durationMs = Date.now() - startTime;
-				this.emit("failure", {
-					ticketId: ticket.id,
-					url: displayUrl,
-					attempts: 1,
-					durationMs,
-					queuedMs: 0,
-					error: err,
-				});
-				// Ticket already marked done inside the loop — skip markDone.
-				cleanup();
-				return;
-			}
-			const error = new NetworkError(err instanceof Error ? err.message : "Queue error", {
-				cause: err,
-			});
+			// A pre-typed RequestError (e.g. QueueFullError, already marked done
+			// inside runRetryLoop before it re-throws) is preserved as-is.
+			// Anything else is a genuinely unexpected throw. Either way, markDone
+			// is only called if the ticket isn't already resolved — covers both
+			// the "already marked done inside the loop" case and a genuine bug.
+			const error =
+				err instanceof RequestError
+					? err
+					: new NetworkError(err instanceof Error ? err.message : "Queue error", { cause: err });
 			this.emit("failure", {
 				ticketId: ticket.id,
 				url: displayUrl,
