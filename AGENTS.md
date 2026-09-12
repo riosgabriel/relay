@@ -54,7 +54,7 @@ Three public entry points, mirrored by `package.json` `exports`:
 Request flow: `client.get()` returns a `Ticket` synchronously → first attempt fires **outside** the bulkhead → only retries go through the per-host partition bulkhead (`src/queue/`). Behavioral invariants — preserve these when touching retry/queue logic:
 
 - First attempt skips the bulkhead (bulkhead throttles retry traffic only).
-- Per-partition circuit breaker (opt-in, `circuitBreaker` config) gates admission before the first attempt — trips open on consecutive failures or a rolling failure-rate window, rejects with `CircuitOpenError` while open, half-opens after `resetTimeoutMs` to trial recovery.
+- Per-partition circuit breaker (opt-in, `circuitBreaker` config) gates admission before the first attempt **and is re-checked before every retry** — trips open on consecutive failures or a rolling failure-rate window, rejects with `CircuitOpenError` while open, half-opens after `resetTimeoutMs` to trial recovery.
 - Default retry policy — only `network`/`timeout`/`retryable_status` errors on idempotent requests (or `retry.idempotent`/`Idempotency-Key` opt-in) are retried; user `retryWhen` is consulted after it and can only veto.
 - `retryWhen` is consulted after **every** failed attempt, including attempt 0.
 - `ValidationError` (failed `parse`) resolves immediately and is never retried.

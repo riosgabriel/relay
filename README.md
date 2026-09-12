@@ -301,7 +301,7 @@ const client = HttpClient.create({
 });
 ```
 
-While open, requests to that partition fail immediately with `CircuitOpenError` — no attempt is made. After `resetTimeoutMs`, one trial request is let through (`halfOpenMaxAttempts`); success closes the circuit, another failure reopens it.
+The breaker is checked before the first attempt and again before every retry — while open, requests to that partition fail immediately with `CircuitOpenError` and no attempt is made. After `resetTimeoutMs`, one trial request is let through (`halfOpenMaxAttempts`); success closes the circuit, another failure reopens it.
 
 Trip on a rolling failure rate instead of consecutive failures:
 

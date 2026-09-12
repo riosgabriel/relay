@@ -17,7 +17,7 @@ Vereda is a resilient HTTP client built on Node's global `fetch`. Four ideas car
 - **Bulkhead** — each host gets its own concurrency limit and waiting queue, so one struggling upstream can't starve the others.
 - **Result** — requests never throw. They resolve to a `{ success, data, raw }` or `{ success: false, error }` union with typed errors.
 
-The one flow to understand: **the first attempt fires immediately, outside the bulkhead. Only retries go through the per-host bulkhead.** This keeps fresh requests fast while throttling retry pressure onto struggling hosts. One exception: if a partition's opt-in **circuit breaker** has tripped open, even that first attempt is skipped — the request fails immediately with `CircuitOpenError`.
+The one flow to understand: **the first attempt fires immediately, outside the bulkhead. Only retries go through the per-host bulkhead.** This keeps fresh requests fast while throttling retry pressure onto struggling hosts. One exception: if a partition's opt-in **circuit breaker** has tripped open, even that first attempt is skipped — the request fails immediately with `CircuitOpenError`. The breaker isn't a one-time check either: it's re-consulted before every retry, so a partition that trips mid-retry-loop stops the loop right there.
 
 ## The reading path
 
@@ -56,7 +56,7 @@ Each partition gets a concurrency limit plus a waiting queue. `schedule()` rejec
 ### Stop 6 — The retry loop
 **Read:** `src/queue/retry.ts` → `runRetryLoop()`
 
-Where retries actually happen. Each attempt: check cancellation, consult `retryWhen`, back off, and re-run `executeRequest()`. When attempts are exhausted, the ticket resolves with `MaxRetriesExceededError`. It reuses the same executor as the first attempt.
+Where retries actually happen. Each attempt: check cancellation, **re-check the circuit breaker** (same gate as Stop 4 — a trip here stops the loop immediately), consult `retryWhen`, back off, and re-run `executeRequest()`. When attempts are exhausted, the ticket resolves with `MaxRetriesExceededError`. It reuses the same executor as the first attempt.
 
 ### Stop 7 — The delay
 **Read:** `src/core/backoff.ts` → `buildBackoffFn()`
