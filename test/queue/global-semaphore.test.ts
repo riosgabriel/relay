@@ -1,5 +1,6 @@
 import * as http from "node:http";
 import { describe, expect, it } from "vitest";
+import { QueueFullError } from "../../src/core/errors.js";
 import { Semaphore } from "../../src/queue/semaphore.js";
 
 function createServer(
@@ -110,5 +111,53 @@ describe("Global semaphore (5.2)", () => {
 		await expect(sem.acquire()).rejects.toThrow("full");
 
 		release1();
+	});
+
+	it("surfaces QueueFullError (not a generic NetworkError) when a first attempt overflows the global queue", async () => {
+		// Reproduces the bug: _fireFirstAttempt's global semaphore.acquire()
+		// rejects with QueueFullError, but request()'s outer .catch() used to
+		// unconditionally demote it to NetworkError, discarding `kind` and the
+		// partition/queueSize/maxQueueSize fields into an inaccessible `.cause`.
+		// concurrency: 1 + maxQueueSize: 0 means the second simultaneous first
+		// attempt has nowhere to queue and must reject immediately.
+
+		const { url, close } = await createServer((_req, res) => {
+			// Slow response so the first request holds its permit while the
+			// second request's semaphore.acquire() call overflows the queue.
+			setTimeout(() => {
+				res.statusCode = 200;
+				res.end("ok");
+			}, 100);
+		});
+
+		try {
+			const { HttpClient } = await import("../../src/core/client.js");
+
+			const client = HttpClient.create({
+				baseUrl: url,
+				timeout: { attemptMs: 5_000 },
+				concurrency: 1, // Global semaphore: only 1 permit
+				maxQueueSize: 0, // No room to wait — overflow rejects immediately
+				retry: {
+					maxRetries: 0, // First-attempt path only, no retry loop involved
+				},
+			});
+
+			const [first, second] = await Promise.all([client.get("/a").toPromise(), client.get("/b").toPromise()]);
+
+			// The first request should succeed (it took the only permit).
+			expect(first.success).toBe(true);
+
+			// The second should fail with the queue-full classification intact.
+			expect(second.success).toBe(false);
+			if (!second.success) {
+				expect(second.error).toBeInstanceOf(QueueFullError);
+				expect(second.error.kind).toBe("queue_full");
+			}
+
+			await client.close();
+		} finally {
+			await close();
+		}
 	});
 });
